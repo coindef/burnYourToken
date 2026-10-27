@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>不联网探针（运行中）</title>
+  <style>
+    body { font: 15px/1.5 -apple-system, "PingFang SC", sans-serif; margin: 0; }
+    #app { display: block; width: 100%; height: 300px; border: 0; border-bottom: 3px solid #333; }
+    .report { margin: 20px; }
+    .pass { color: #1b6440; } .fail { color: #9b2c2c; font-weight: 700; }
+    #summary { font-size: 20px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <!-- 故意让被测页面往外发东西，确认每一种都被页面自己的安全设置拦下。被拦下时浏览器会在控制台打提示，这是预期的。 -->
+  <iframe id="app" title="被测页面"></iframe>
+  <div class="report">
+    <h1>不联网探针：故意发请求，确认都被拦下</h1>
+    <p>要用本地静态服务器打开（同 tests/e2e.html）。目标地址只有本机：同一个服务器，或 127.0.0.1:9（没有东西在听）。</p>
+    <p id="summary">运行中…</p>
+    <ol id="out"></ol>
+  </div>
+  <script src="harness.js"></script>
+  <script src="probe.js"></script>
+</body>
+</html>

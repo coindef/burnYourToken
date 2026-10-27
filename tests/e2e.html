@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>页面流程测试（运行中）</title>
+  <style>
+    body { font: 15px/1.5 -apple-system, "PingFang SC", sans-serif; margin: 0; }
+    #app { display: block; width: 100%; height: 900px; border: 0; border-bottom: 3px solid #333; }
+    .report { margin: 20px; }
+    .pass { color: #1b6440; } .fail { color: #9b2c2c; font-weight: 700; }
+    #summary { font-size: 20px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <!-- 被测页面放在 iframe 里，像用户一样填表、点按钮 -->
+  <iframe id="app" title="被测页面"></iframe>
+  <div class="report">
+    <h1>页面流程测试：计算器 → 问卷 → 推荐 → 做完再算</h1>
+    <p>需要用本地静态服务器打开（iframe 同源才能操作）：在项目目录运行 <code>python3 -m http.server 8000</code>，再打开 <code>http://localhost:8000/tests/e2e.html</code>。</p>
+    <p id="summary">运行中…</p>
+    <ol id="out"></ol>
+  </div>
+  <script src="harness.js"></script>
+  <script src="e2e.js"></script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- 雏形不联网：只许加载自己目录里的 css/js；不许发任何请求、不许往外加载图片、不许把表单提交到别处 -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+  <link rel="icon" href="data:,">
+  <title>burnYourToken · 雏形 v0</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <p class="tag">雏形 v0 · 只在你的浏览器里算，不联网，不用登录</p>
+      <h1>订了 AI 会员，额度总是用不完？</h1>
+      <p class="lead">挑一个大小合适的项目，把剩下的额度用在你真正想做的事上。</p>
+      <ol class="jump">
+        <li><a href="#calc"><b>1</b> 算算还剩多少</a></li>
+        <li><a href="#quiz"><b>2</b> 说说你想做什么（可跳过）</a></li>
+        <li><a href="#recs"><b>3</b> 挑一个项目做完</a></li>
+      </ol>
+      <p class="loop-line">做完一个 → 回来再算一次 → 推下一个，直到额度重置。</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- ============ 第 1 步：剩余额度计算器 ============ -->
+    <section id="calc" class="step" aria-labelledby="calc-title">
+      <h2 id="calc-title"><span class="num">1</span>算算还剩多少</h2>
+      <p>打开你订的 AI 服务的「用量」页面，把上面写的数字抄到下面。两个都订了就两个都填——<strong>每个服务分开算，不会加在一起</strong>。</p>
+
+      <div class="honest" role="note" aria-labelledby="honest-title">
+        <h3 id="honest-title">先说清楚</h3>
+        <ul>
+          <li>厂商公布的是<strong>「窗口」</strong>：比如一段 5 小时的额度、一段一周的额度，到点就重置。他们没有公布每段能用多少 token（AI 计算用量的单位）。</li>
+          <li>用量页给你看的是<strong>用了百分之几</strong>和<strong>什么时候重置</strong>，不是还剩多少 token。</li>
+          <li>所以这里算出的<strong>大、中、小</strong>是我们的<strong>经验规则</strong>，不是厂商给的数字，只能当参考。</li>
+          <li>只算按月付费的会员。如果你是按 API 用量付钱（用多少付多少），没有「窗口」这一说，这里不适用。</li>
+        </ul>
+      </div>
+
+      <figure class="usage-demo">
+        <figcaption>用量页大概长这样（<strong>示意图</strong>，不是真实截图，各家页面不完全一样）：</figcaption>
+        <div class="demo-row">
+          <span class="demo-name">当前会话（5 小时）</span>
+          <span class="demo-bar" aria-hidden="true"><i class="demo-fill-72"></i></span>
+          <span class="demo-num">已用 72%</span>
+          <span class="demo-reset">3 小时 12 分钟后重置</span>
+        </div>
+        <div class="demo-row">
+          <span class="demo-name">每周额度</span>
+          <span class="demo-bar" aria-hidden="true"><i class="demo-fill-31"></i></span>
+          <span class="demo-num">已用 31%</span>
+          <span class="demo-reset">周四 8:00 重置</span>
+        </div>
+        <p class="demo-copy">照着抄就是：5 小时额度填 <b>72</b>，还有 <b>3</b> 小时 <b>12</b> 分钟；每周额度填 <b>31</b>，<b>周四</b>，<b>8:00</b>。</p>
+      </figure>
+
+      <p class="msg info" id="restore-note" hidden>已带回你在这个标签页里填过的内容。重置时间可能已经变了，对照用量页确认后，再点「算一下」。</p>
+
+      <form id="calc-form" novalidate>
+        <div class="services" id="services"><!-- 由 js/app.js 生成两张服务卡 --></div>
+        <button type="submit" class="primary" id="calc-btn">算一下</button>
+      </form>
+
+      <div id="calc-results" class="results" aria-live="polite"></div>
+
+      <details class="rules">
+        <summary>档位是怎么算的？（经验规则）</summary>
+        <ol>
+          <li>5 小时额度还剩多少、每周额度还剩多少，<strong>取少的那个</strong>，叫「有效剩余」。</li>
+          <li><strong>大档</strong>：两个都剩 50% 以上（不含 50%），<strong>并且</strong>离每周额度重置还有 1 天以上。</li>
+          <li><strong>中档</strong>：有一个剩 20%–50%。两个都剩 50% 以上、但每周额度 1 天内就重置的，也只算中档。</li>
+          <li><strong>小档</strong>：有一个剩不到 20%，<strong>或者</strong>离每周额度重置只剩几小时（不到 5 小时）。</li>
+          <li>同时符合两条的，按小的那个算，不会往大了算。剩 0 → 先别开新项目，等重置。</li>
+          <li>5 小时额度本来就几个小时重置一次，它的重置时间不影响档位；只是卡在它上面、它又快重置时，会提醒你重置后再算一次。</li>
+          <li>小档：大约 15–30 分钟，聊几轮就够。中档：大约 1 小时，来回聊十几轮。大档：大约 2–3 小时，可以分几次做完。</li>
+          <li>只看百分比，不看你订的是哪一档。同样剩 50%，贵的档能做的事更多，但具体多多少厂商没公布，我们也不假装知道。</li>
+          <li>两个服务各算各的，不相加。</li>
+        </ol>
+      </details>
+    </section>
+
+    <!-- ============ 第 2 步：短问卷 ============ -->
+    <section id="quiz" class="step" aria-labelledby="quiz-title">
+      <h2 id="quiz-title"><span class="num">2</span>说说你想做什么<small>（自愿，可以跳过）</small></h2>
+      <p class="privacy">你的回答只存在这个浏览器标签页里，只用来给项目排顺序，不会发到任何地方，关掉标签页就没了。我们不做统计，也不要账号。</p>
+      <p class="skip-row">每一题都可以不答。不想答？<button type="button" id="skip-btn" class="secondary">跳过，直接看推荐</button>不填也会按你的剩余档位推荐。</p>
+
+      <form id="quiz-form" novalidate>
+        <fieldset class="q">
+          <legend><span class="qn">问题 1</span> 你想在哪方面用？（可以多选）</legend>
+          <div class="chips" id="q-domains"><!-- 由 js/app.js 按领域列表生成 --></div>
+          <label class="field other">其他，我自己写：
+            <input type="text" id="q-other" maxlength="40" autocomplete="off" placeholder="比如：养宠物、带孩子">
+          </label>
+        </fieldset>
+
+        <fieldset class="q">
+          <legend><span class="qn">问题 2</span> 最近想做的一件事？</legend>
+          <label class="field">
+            <span class="hint">一句话就行，随便写。写了的话，我们会多给你一张按这件事做的项目卡。</span>
+            <input type="text" id="q-wish" maxlength="80" autocomplete="off" placeholder="比如：给妈妈过 60 岁生日、学会做三道家常菜">
+          </label>
+        </fieldset>
+
+        <fieldset class="q">
+          <legend><span class="qn">问题 3</span> 这次想要一个什么样的成果？（可以多选）</legend>
+          <div class="chips" id="q-outputs"><!-- 由 js/app.js 按成果列表生成 --></div>
+        </fieldset>
+
+        <fieldset class="q">
+          <legend><span class="qn">问题 4</span> 这次是给谁做的？（可以多选）</legend>
+          <div class="chips" id="q-audiences"><!-- 由 js/app.js 按列表生成 --></div>
+        </fieldset>
+
+        <fieldset class="q">
+          <legend><span class="qn">问题 5</span> 你订了哪个服务？这次用哪个的剩余？</legend>
+          <div class="chips">
+            <label class="chip"><input type="radio" name="q-service" value="claude"> Claude</label>
+            <label class="chip"><input type="radio" name="q-service" value="chatgpt"> ChatGPT（Codex）</label>
+          </div>
+          <p class="hint">两个都订了，就选这次想用的那个。两个服务的额度分开算，不会加在一起。</p>
+        </fieldset>
+
+        <div class="clear-row">
+          <button type="button" id="clear-btn" class="secondary">清除我的回答</button>
+          <p class="hint">会清掉这一页上你填过的所有东西：问卷回答、第 1 步的数字、做完的记录。</p>
+          <p class="msg ok" id="clear-msg" role="status" hidden></p>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============ 第 3 步：项目推荐 ============ -->
+    <section id="recs" class="step" aria-labelledby="recs-title">
+      <h2 id="recs-title" tabindex="-1"><span class="num">3</span>挑一个项目，做完它</h2>
+
+      <div id="done-banner" class="done-banner" role="status" hidden>
+        <p class="done-title" id="done-title"></p>
+        <p>下一步：回到用量页，把两个百分比和重置时间<strong>重新抄一遍</strong>，再点「算一下」。剩余变了，推荐会跟着变，接着推下一个，直到额度重置。</p>
+        <p class="small" id="done-round"></p>
+        <button type="button" id="recalc-btn" class="primary">回到第 1 步重新算</button>
+      </div>
+
+      <div id="recs-status" class="recs-status" aria-live="polite"></div>
+      <div id="recs-list" class="cards"></div>
+
+      <details id="recs-others" class="smaller" hidden>
+        <summary>同一档的其他项目，跟你的偏好没对上（<span id="others-count">0</span> 个）</summary>
+        <div id="others-list" class="cards"></div>
+      </details>
+
+      <details id="recs-smaller" class="smaller" hidden>
+        <summary>想轻松一点？这些比你的剩余小，也可以做（<span id="smaller-count">0</span> 个）</summary>
+        <div id="smaller-list" class="cards"></div>
+      </details>
+
+      <p class="loop">做完一个，点卡片上的「我做完了」，再回第 1 步重新算一次。现在这版不会自动帮你记用量，要你自己回用量页看。</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <p>这是雏形 v0：不联网、不用账号、不收集任何数据、不做统计，也不会去读你的用量页。你填的东西只存在这个浏览器标签页里，关掉标签页就没了；也可以随时点「清除我的回答」。</p>
+    </div>
+  </footer>
+
+  <script src="js/projects.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
