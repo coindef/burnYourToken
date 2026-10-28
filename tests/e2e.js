@@ -341,6 +341,27 @@
     calc();
     eq(resultOf('claude').dataset.band, 'large', 'clock fill calculates');
     eq(W.QP.app.state.done.length, 0, 'calculate does not mark done');
+
+    setVal('claude-w-day', '4');
+    setVal('claude-w-clock', '08:00');
+    eq($('claude-w-day').value, '4', 'prior weekday');
+    eq($('claude-w-clock').value, '08:00', 'prior weekly time');
+    installUsageBridge(() => ({
+      ok: true,
+      usage: {
+        mode: 'used', sessionPct: '40', sessionResetType: 'countdown', sessionH: '2', sessionM: '0',
+        weeklyPct: '55', weeklyDay: '', weeklyClock: ''
+      }
+    }));
+    $('fill-usage-btn').click();
+    await flushFill();
+    eq($('claude-s-pct').value, '40', 'session percent replaced');
+    eq($('claude-w-pct').value, '55', 'weekly percent replaced');
+    eq($('claude-w-day').value, '', 'empty parsed weekday clears the old one');
+    eq($('claude-w-clock').value, '', 'empty parsed weekly time clears the old one');
+    eq(resultOf('claude').dataset.band, 'large', 'fill still does not calculate');
+    eq($('done-banner').hidden, true, 'fill still does not mark done');
+    eq(W.QP.app.state.done.length, 0, 'done list still empty');
     removeUsageBridge();
   });
 

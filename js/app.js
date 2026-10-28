@@ -585,7 +585,7 @@
     $(id).value = String(value);
   }
 
-  // Writes only Session, Resets in, and Weekly (plus weekday/time when the read included them).
+  // Writes Session, Resets in, and Weekly. Empty or missing weekday/time clears those fields.
   function writeUsage(p, u) {
     if (!u) return;
     if (u.mode === 'used' || u.mode === 'left') {
@@ -610,8 +610,8 @@
       $(p + '-s-clock').value = '';
     }
     assignField(p + '-w-pct', u.weeklyPct);
-    if (u.weeklyDay != null && u.weeklyDay !== '') $(p + '-w-day').value = String(u.weeklyDay);
-    if (u.weeklyClock) $(p + '-w-clock').value = String(u.weeklyClock);
+    $(p + '-w-day').value = u.weeklyDay != null && String(u.weeklyDay) !== '' ? String(u.weeklyDay) : '';
+    $(p + '-w-clock').value = u.weeklyClock != null && String(u.weeklyClock) !== '' ? String(u.weeklyClock) : '';
   }
 
   async function fillFromUsage() {
