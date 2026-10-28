@@ -10,6 +10,11 @@
   const appErrors = [];
 
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  async function flushFill() {
+    await wait(0);
+    await wait(0);
+    await wait(0);
+  }
   const $ = id => D.getElementById(id);
   const text = node => (node ? node.textContent : '');
 
@@ -89,6 +94,56 @@
   }
 
   function calc() { $('calc-btn').click(); }
+
+  const FILL_WORKING = 'Reading Usage…';
+  const FILL_OK = 'Filled from Usage.';
+  const FILL_NO_EXT = 'Extension not found. Copy the three numbers, or load the unpacked extension (see README).';
+  const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
+
+  function removeUsageBridge() {
+    if (W.__bytBridge) {
+      W.removeEventListener('message', W.__bytBridge);
+      W.__bytBridge = null;
+    }
+  }
+
+  function deliverUsage(id, result) {
+    if (!result) return;
+    // Call through the page so postMessage's source is the app window, same as the extension.
+    W.QP.app.postToPage({
+      source: 'byt-extension',
+      type: 'fill-result',
+      id: id,
+      ok: result.ok === true,
+      error: result.error || '',
+      usage: result.usage || null
+    });
+  }
+
+  function installUsageBridge(respond) {
+    removeUsageBridge();
+    function onMsg(event) {
+      if (event.source !== W) return;
+      const data = event.data;
+      if (!data || data.source !== 'byt-page' || data.type !== 'fill-request') return;
+      const result = respond(data);
+      if (result && typeof result.then === 'function') {
+        result.then(value => deliverUsage(data.id, value));
+        return;
+      }
+      deliverUsage(data.id, result);
+    }
+    W.__bytBridge = onMsg;
+    W.addEventListener('message', onMsg);
+  }
+
+  function fixtureUsage() {
+    const doc = document.getElementById('usage-fixture').contentDocument;
+    ok(doc && doc.body && doc.body.textContent.indexOf('72%') !== -1, 'usage fixture loaded');
+    const usage = parseUsageRoot(doc, new Date(2026, 6, 13, 10, 0, 0));
+    ok(usage && usage.ok, 'fixture parses');
+    return usage;
+  }
   const resultOf = p => D.querySelector('#calc-results .result[data-service="' + p + '"]');
   const cards = () => Array.from(D.querySelectorAll('#recs-list .card'));
   const smallerCards = () => Array.from(D.querySelectorAll('#smaller-list .card'));
@@ -120,9 +175,16 @@
     ok(map && !map.open, '用量图默认收起');
     eq(map.querySelector('summary').textContent.trim(), 'Show usage page map');
     eq(text(D.querySelector('h1')).trim(), 'Leftover Claude quota?');
-    const honesty = 'Runs only in this tab. Doesn’t read Claude Usage. Nothing starts until you click.';
-    eq(D.body.textContent.split(honesty).length - 1, 1, 'honesty once');
-    ok(text(D.querySelector('footer')).indexOf(honesty) !== -1, 'honesty in footer');
+    const honesty = 'Runs only in this tab. Only reads Usage after you click Fill. Nothing burns until you Mark done.';
+    eq(text(D.querySelector('footer')).replace(/\s+/g, ' ').trim(), honesty, 'footer');
+    eq(D.body.textContent.split('Nothing burns until you Mark done.').length - 1, 1, 'honesty once');
+    ok(D.body.textContent.indexOf('Doesn\u2019t read Claude Usage') === -1, 'old honesty gone');
+    eq($('fill-usage-btn').textContent.trim(), 'Fill from Claude Usage');
+    eq($('fill-usage-btn').nextElementSibling.id, 'example-btn', 'fill is left of Try sample');
+    ok($('fill-usage-btn').classList.contains('secondary') && $('calc-btn').classList.contains('primary'), 'fill is secondary');
+    eq($('fill-status').hidden, true, 'idle has no helper');
+    eq($('fill-status').textContent, '', 'idle copy empty');
+    eq($('claude-s-pct').value, '', 'does not fill on load');
     ok(!/[\u4e00-\u9fff]/.test(D.body.textContent), '页面没有中文');
   });
 
@@ -181,6 +243,126 @@
     await aligned(375);
     await aligned(900);
     frame.style.width = '';
+  });
+
+  test('Fill from Claude Usage fills Session, Resets in, and Weekly; Calculate is a separate click', async () => {
+    await fresh();
+    await reloadApp();
+    removeUsageBridge();
+    eq($('claude-s-pct').value, '', 'reload does not fill');
+    eq($('claude-w-pct').value, '', 'weekly still empty');
+    eq($('fill-status').textContent, '', 'no status on load');
+    ok($('fill-status').hidden, 'status hidden on load');
+    ok(text($('calc-results')).indexOf('Nothing calculated yet.') !== -1, 'no calculate on load');
+    eq($('done-banner').hidden, true, 'no mark done on load');
+    eq(W.QP.app.state.done.length, 0, 'nothing marked done');
+    ok(!D.querySelector('dialog'), 'status is not a modal');
+    ok($('fill-status').closest('.calc-actions'), 'status sits with the buttons');
+
+    $('fill-usage-btn').click();
+    eq($('fill-status').textContent, FILL_WORKING, 'working');
+    await wait(1700);
+    eq($('fill-status').textContent, FILL_NO_EXT, 'no extension');
+    eq($('claude-s-pct').value, '', 'still empty');
+    ok(text($('calc-results')).indexOf('Nothing calculated yet.') !== -1, 'no extension does not calculate');
+
+    const usage = fixtureUsage();
+    let release = null;
+    installUsageBridge(() => new Promise(resolve => { release = resolve; }));
+    setVal('claude-plan', 'max5');
+    pick('input[name="claude-mode"][value="left"]');
+    $('fill-usage-btn').click();
+    eq($('fill-status').textContent, FILL_WORKING, 'working again');
+    eq($('claude-s-pct').value, '', 'does not fill before the read returns');
+    await wait(0);
+    ok(typeof release === 'function', 'bridge is waiting');
+    eq($('fill-status').textContent, FILL_WORKING, 'still reading');
+    release({ ok: true, usage: usage });
+    await flushFill();
+    eq($('claude-plan').value, 'max5', 'plan stays');
+    eq($('claude-s-pct').value, usage.sessionPct, 'session');
+    eq($('claude-s-h').value, usage.sessionH, 'hours');
+    eq($('claude-s-m').value, usage.sessionM, 'minutes');
+    ok(D.querySelector('input[name="claude-s-reset"][value="countdown"]').checked, 'resets in');
+    eq($('claude-w-pct').value, usage.weeklyPct, 'weekly');
+    eq($('claude-w-day').value, usage.weeklyDay, 'weekday');
+    eq($('claude-w-clock').value, usage.weeklyClock, 'weekly time');
+    ok(D.querySelector('input[name="claude-mode"][value="used"]').checked, 'percent used');
+    eq($('fill-status').textContent, FILL_OK, 'success');
+    ok(text($('calc-results')).indexOf('Nothing calculated yet.') !== -1, 'fill does not calculate');
+    eq($('done-banner').hidden, true, 'fill does not mark done');
+    eq(W.QP.app.state.done.length, 0, 'done list empty');
+    eq(cards().length, 0, 'no project cards yet');
+
+    calc();
+    eq(resultOf('claude').dataset.band, 'medium', 'filled numbers calculate');
+    ok(cards().length > 0, 'recommendations after Calculate');
+    eq($('fill-status').textContent, FILL_OK, 'calculate does not clear success');
+
+    setVal('claude-s-pct', '70');
+    eq($('fill-status').hidden, true, 'next edit clears success');
+    eq($('fill-status').textContent, '', 'helper gone');
+    ok(text($('calc-results')).indexOf('Click Calculate to update') !== -1, 'edit does not recalculate');
+    eq(resultOf('claude').dataset.band, 'medium', 'old band stays until Calculate');
+
+    installUsageBridge(() => ({ ok: true, usage: usage }));
+    $('fill-usage-btn').click();
+    await flushFill();
+    eq($('claude-s-pct').value, '72', 'filled again');
+    eq($('fill-status').textContent, FILL_OK, 'success again');
+    ok(text($('calc-results')).indexOf('Click Calculate to update') !== -1, 'second fill does not calculate');
+    eq(resultOf('claude').dataset.band, 'medium', 'band unchanged');
+    await wait(2200);
+    eq($('fill-status').hidden, true, 'success clears after about 2s');
+    eq($('fill-status').textContent, '', 'cleared');
+
+    installUsageBridge(() => ({ ok: false, error: 'parse' }));
+    $('fill-usage-btn').click();
+    await flushFill();
+    eq($('fill-status').textContent, FILL_PARSE, 'parse fail');
+    eq($('claude-s-pct').value, '72', 'parse fail keeps the numbers');
+    eq(W.QP.app.state.done.length, 0, 'parse fail does not mark done');
+    eq($('done-banner').hidden, true, 'banner still hidden');
+
+    installUsageBridge(() => ({
+      ok: true,
+      usage: {
+        mode: 'used', sessionPct: '10', sessionResetType: 'clock', sessionClock: '10:30',
+        sessionH: '', sessionM: '', weeklyPct: '10', weeklyDay: '4', weeklyClock: '08:00'
+      }
+    }));
+    $('fill-usage-btn').click();
+    await flushFill();
+    eq($('claude-s-clock').value, '10:30', 'session clock');
+    ok(D.querySelector('input[name="claude-s-reset"][value="clock"]').checked, 'clock mode');
+    eq($('claude-s-h').value, '', 'countdown hours cleared');
+    eq($('fill-status').textContent, FILL_OK, 'clock fill success');
+    eq(resultOf('claude').dataset.band, 'medium', 'still the previous calculation');
+    calc();
+    eq(resultOf('claude').dataset.band, 'large', 'clock fill calculates');
+    eq(W.QP.app.state.done.length, 0, 'calculate does not mark done');
+
+    setVal('claude-w-day', '4');
+    setVal('claude-w-clock', '08:00');
+    eq($('claude-w-day').value, '4', 'prior weekday');
+    eq($('claude-w-clock').value, '08:00', 'prior weekly time');
+    installUsageBridge(() => ({
+      ok: true,
+      usage: {
+        mode: 'used', sessionPct: '40', sessionResetType: 'countdown', sessionH: '2', sessionM: '0',
+        weeklyPct: '55', weeklyDay: '', weeklyClock: ''
+      }
+    }));
+    $('fill-usage-btn').click();
+    await flushFill();
+    eq($('claude-s-pct').value, '40', 'session percent replaced');
+    eq($('claude-w-pct').value, '55', 'weekly percent replaced');
+    eq($('claude-w-day').value, '', 'empty parsed weekday clears the old one');
+    eq($('claude-w-clock').value, '', 'empty parsed weekly time clears the old one');
+    eq(resultOf('claude').dataset.band, 'large', 'fill still does not calculate');
+    eq($('done-banner').hidden, true, 'fill still does not mark done');
+    eq(W.QP.app.state.done.length, 0, 'done list still empty');
+    removeUsageBridge();
   });
 
   test('已用/还剩同时管①和③：标签跟着变，每周和 5 小时用同一种算法', async () => {

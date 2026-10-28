@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "burnYourToken: Fill from Claude Usage",
+  "version": "1.0.0",
+  "description": "After you click Fill from Claude Usage, copies Session, Resets in, and Weekly into burnYourToken. Does not calculate or mark a project done.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "file:///*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["usage-parse.js", "claude-content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://127.0.0.1/*", "http://localhost/*", "file:///*"],
+      "js": ["app-bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

@@ -81,8 +81,10 @@
           </div>
         </fieldset>
         <div class="calc-actions">
+          <button type="button" class="secondary" id="fill-usage-btn">Fill from Claude Usage</button>
           <button type="button" class="secondary" id="example-btn">Try sample</button>
           <button type="submit" class="primary" id="calc-btn">Calculate</button>
+          <p id="fill-status" class="fill-status" role="status" hidden></p>
         </div>
       </form>
 
@@ -168,7 +170,7 @@
 
   <footer class="foot">
     <div class="wrap">
-      <p>Runs only in this tab. Doesn’t read Claude Usage. Nothing starts until you click.</p>
+      <p>Runs only in this tab.<br> Only reads Usage after you click Fill.<br> Nothing burns until you Mark done.</p>
     </div>
   </footer>
 

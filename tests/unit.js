@@ -553,5 +553,123 @@
     eq(C.recommend({ band: 'large', wish: '想存钱买车' }).cards[0].id, 'life-budget', '大档：存钱');
   });
 
+  function usageDoc(html) {
+    return new DOMParser().parseFromString('<!doctype html><html><body>' + html + '</body></html>', 'text/html');
+  }
+
+  test('Usage fixture: Session, Resets in, Weekly; fullest weekly; ignore credits', () => {
+    const frame = document.getElementById('usage-fixture');
+    const doc = frame && frame.contentDocument;
+    ok(doc && doc.body && doc.body.textContent.indexOf('72%') !== -1, 'fixture iframe');
+    const usage = parseUsageRoot(doc, new Date(2026, 6, 13, 10, 0, 0));
+    eq(usage.ok, true, 'parsed');
+    eq(usage.mode, 'used', 'mode');
+    eq(usage.sessionPct, '72', 'session');
+    eq(usage.sessionResetType, 'countdown', 'resets in');
+    eq(usage.sessionH, '3', 'hours');
+    eq(usage.sessionM, '12', 'minutes');
+    eq(usage.sessionClock, '', 'no session clock');
+    eq(usage.weeklyPct, '31', 'fullest weekly, not Sonnet 12 and not credits 90');
+    eq(usage.weeklyDay, '4', 'Thursday');
+    eq(usage.weeklyClock, '08:00', 'weekly time');
+    eq(Object.keys(usage).sort().join(','), 'mode,ok,sessionClock,sessionH,sessionM,sessionPct,sessionResetType,weeklyClock,weeklyDay,weeklyPct');
+    ok(JSON.stringify(usage).indexOf('Sonnet') === -1 && JSON.stringify(usage).indexOf('90') === -1, 'no extra prose');
+  });
+
+  test('Usage parse: clock resets, fullest model, left vs used, empty session, closed page', () => {
+    const now = new Date(2026, 6, 13, 10, 0, 0); // Monday
+    const clock = parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>Resets Tue 10:00 AM</p><p>12% used</p>' +
+      '<h3>Weekly limits</h3>' +
+      '<h4>All models</h4><p>Resets Tue 11:59 AM</p><p>45% used</p>' +
+      '<h4>Fable</h4><p>Resets Fri 9:30 PM</p><p>80% used</p>' +
+      '<h3>Usage credits</h3><p>2% used</p>'
+    ), now);
+    eq(clock.ok, true, 'clock page');
+    eq(clock.sessionResetType, 'clock', 'session clock');
+    eq(clock.sessionClock, '10:00', '10:00 AM');
+    eq(clock.sessionPct, '12', 'session pct');
+    eq(clock.weeklyPct, '80', 'fullest is Fable, not All models 45 or credits 2');
+    eq(clock.weeklyDay, '5', 'Friday');
+    eq(clock.weeklyClock, '21:30', '9:30 PM');
+
+    const left = parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>Resets in 1 hr 5 min</p><p>40% left</p>' +
+      '<h3>Weekly limits</h3><h4>All models</h4><p>Resets on Monday at 9:00 AM</p><p>25% remaining</p>'
+    ), now);
+    eq(left.mode, 'left', 'left');
+    eq(left.sessionPct, '40', 'session left');
+    eq(left.sessionH, '1', 'h');
+    eq(left.sessionM, '5', 'm');
+    eq(left.weeklyPct, '25', 'weekly left');
+    eq(left.weeklyDay, '1', 'Monday');
+    eq(left.weeklyClock, '09:00', '9:00 AM');
+
+    const fresh = parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>Starts when a message is sent</p><p>0% used</p>' +
+      '<h3>Weekly limits</h3><h4>All models</h4><p>Resets Wed 7:15 PM</p><p>10% used</p>'
+    ), now);
+    eq(fresh.sessionPct, '0', 'not started');
+    eq(fresh.sessionResetType, 'none', 'no countdown');
+    eq(fresh.sessionH, '', 'hours blank');
+    eq(fresh.weeklyPct, '10', 'weekly');
+    eq(fresh.weeklyDay, '3', 'Wednesday');
+    eq(fresh.weeklyClock, '19:15', '7:15 PM');
+
+    const relative = parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>Resets Today 11:30 AM</p><p>20% used</p>' +
+      '<h3>All models</h3><p>Resets Tomorrow 9:00 AM</p><p>15% used</p>'
+    ), now);
+    eq(relative.sessionClock, '11:30', 'today clock');
+    eq(relative.weeklyDay, '2', 'tomorrow is Tuesday');
+    eq(relative.weeklyClock, '09:00', 'tomorrow time');
+
+    const words = parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>Resets in 3 hours, 12 minutes</p><p>12.5% used</p>' +
+      '<h3>Weekly limits</h3><p>All models</p><p>Resets in 2 hours</p><p>0.5% used</p>'
+    ), now);
+    eq(words.sessionPct, '12.5', 'decimal');
+    eq(words.sessionH, '3', '3 hours');
+    eq(words.sessionM, '12', '12 minutes');
+    eq(words.weeklyPct, '0.5', 'weekly decimal');
+
+    const mins = parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>Resets in 45 minutes</p><p>8% used</p>' +
+      '<h3>Weekly limits</h3><h4>All models</h4><p>Resets Sat 6:05 PM</p>' +
+      '<div role="progressbar" aria-valuenow="8" aria-valuemin="0" aria-valuemax="100"></div>'
+    ), now);
+    eq(mins.sessionH, '0', 'zero hours');
+    eq(mins.sessionM, '45', '45 min');
+    eq(mins.weeklyPct, '8', 'bar percent');
+    eq(mins.weeklyDay, '6', 'Saturday');
+    eq(mins.weeklyClock, '18:05', '6:05 PM');
+
+    const bars = parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>Resets in 2 hours</p>' +
+      '<div role="progressbar" aria-valuenow="64" aria-valuemin="0" aria-valuemax="100"></div>' +
+      '<h3>Weekly limits</h3><h4>All models</h4><p>Resets Thu 8:00</p>' +
+      '<div role="progressbar" aria-valuenow="5" aria-valuemin="0" aria-valuemax="100"></div>'
+    ), now);
+    eq(bars.sessionPct, '64', 'session bar');
+    eq(bars.sessionH, '2', '2 hours');
+    eq(bars.sessionM, '0', '0 min');
+    eq(bars.weeklyPct, '5', 'weekly bar');
+    eq(bars.weeklyClock, '08:00', '24h clock');
+
+    const hidden = parseUsageRoot(usageDoc(
+      '<div style="display:none"><h3>Current session</h3><p>99% used</p><h3>Weekly limits</h3><p>All models</p><p>99% used</p></div>' +
+      '<h3>Current session</h3><p>Resets in 1 hr 0 min</p><p>4% used</p>' +
+      '<h3>Weekly limits</h3><h4>All models</h4><p>Resets Thu 8:00 AM</p><p>6% used</p>'
+    ), now);
+    eq(hidden.sessionPct, '4', 'skip display:none');
+    eq(hidden.weeklyPct, '6', 'visible weekly');
+
+    eq(parseUsageRoot(usageDoc('<h1>Chat</h1><p>How do I check usage later?</p>'), now).ok, false, 'chat is not Usage');
+    eq(parseUsageRoot(usageDoc('<h3>Current session</h3><p>10% used</p>'), now).ok, false, 'no weekly');
+    eq(parseUsageRoot(usageDoc(
+      '<h3>Current session</h3><p>10% used</p><h3>Weekly limits</h3><p>All models</p><p>10% left</p>'
+    ), now).ok, false, 'used and left disagree');
+  });
+
   window.addEventListener('load', () => runTests());
 })();

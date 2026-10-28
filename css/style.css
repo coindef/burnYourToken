@@ -284,6 +284,10 @@ button {
 .secondary:hover { background: var(--bg); }
 .calc-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .calc-actions button { flex: 1 1 160px; }
+.fill-status { flex: 1 0 100%; margin: 0; font-size: 14px; }
+.fill-status.working { color: var(--muted); }
+.fill-status.ok { color: var(--ok); }
+.fill-status.warn { color: var(--warn); }
 #calc-btn { margin: 0; width: auto; font-size: 18px; }
 
 /* ---------- 计算结果 ---------- */
