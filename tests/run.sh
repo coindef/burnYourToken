@@ -39,8 +39,10 @@ if kind == "tests":
     print("  结果：" + line)
     bad = not line.startswith("PASS")
 else:
-    ok = 'id="svc-claude"' in dom and 'name="q-output"' in dom and 'name="q-audience"' in dom
-    print("  页面：" + ("正常显示（两张服务卡和问卷都生成了）" if ok else "没有正常显示"))
+    ok = ('id="svc-claude"' in dom and 'id="svc-chatgpt"' not in dom
+          and '从 Claude 用量页抄三个数' in dom and '填示例试试' in dom
+          and 'name="q-output"' in dom and 'name="q-audience"' in dom)
+    print("  页面：" + ("正常显示（Claude 抄用量和问卷都在）" if ok else "没有正常显示"))
     bad = not ok
 msgs = [l.strip() for l in open(log_path, encoding="utf-8", errors="replace")
         if ":CONSOLE" in l or "Uncaught" in l]
