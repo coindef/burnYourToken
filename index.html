@@ -1,194 +1,174 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- 雏形不联网：只许加载自己目录里的 css/js；不许发任何请求、不许往外加载图片、不许把表单提交到别处 -->
+  <!-- Prototype stays offline: only local css/js. No requests, no remote images, no form posts. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
   <link rel="icon" href="data:,">
-  <title>burnYourToken · 抄三个数，自己点</title>
+  <title>Leftover Claude quota?</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="top">
     <div class="wrap">
-      <p class="tag">只在这个浏览器里算 · 不读用量页 · 不会自动消耗额度</p>
-      <h1>Claude 的额度，还没用完？</h1>
-      <p class="lead">从用量页抄三个数，按还剩多少推荐一个项目。你点了卡片才算选上，不会自动开始。</p>
+      <h1>Leftover Claude quota?</h1>
+      <p class="lead">Copy three numbers from Usage. We’ll suggest a project that fits what’s left.</p>
       <ol class="jump">
-        <li><a href="#calc"><b>1</b> 从 Claude 用量页抄三个数</a></li>
-        <li><a href="#quiz"><b>2</b> 说说你想做什么（可跳过）</a></li>
-        <li><a href="#recs"><b>3</b> 挑一个项目做完</a></li>
+        <li><a href="#calc"><b>1</b> Copy numbers</a></li>
+        <li><a href="#quiz"><b>2</b> Preferences (optional)</a></li>
+        <li><a href="#recs"><b>3</b> Pick a project</a></li>
       </ol>
-      <p class="loop-line">做完一个 → 把三个数再抄一遍 → 推下一个，直到额度重置。</p>
+      <p class="loop-line">Finish one → re-copy the three numbers → next.</p>
     </div>
   </header>
 
   <main class="wrap">
-    <!-- ============ 第 1 步：从 Claude 用量页抄三个数 ============ -->
     <section id="calc" class="step" aria-labelledby="calc-title">
-      <h2 id="calc-title"><span class="num">1</span>从 Claude 用量页抄三个数</h2>
-      <ol class="copy-path" aria-label="打开用量页">
+      <h2 id="calc-title"><span class="num">1</span>Copy numbers</h2>
+      <ol class="copy-path" aria-label="Open Usage">
         <li>Claude</li>
         <li>Settings</li>
         <li>Usage</li>
       </ol>
-      <p class="copy-aside">英文界面上一般就这三个词。别的产品这里的名字可能稍有不同。这一页不会自己去读用量。</p>
-      <ul class="num-key" aria-label="三个数分别是什么">
-        <li><span class="map-mark" aria-hidden="true">①</span><span><b>5 小时额度</b> <span class="en">Session</span>：这一小段用了百分之几，或还剩百分之几。</span></li>
-        <li><span class="map-mark" aria-hidden="true">②</span><span><b>何时重置</b> <span class="en">Resets in</span>：这段还要多久结束。还没开始用、页面没写时间，可以先空着。</span></li>
-        <li><span class="map-mark" aria-hidden="true">③</span><span><b>每周额度</b> <span class="en">Weekly</span>：这一周用了百分之几，以及周几、几点重置。</span></li>
-      </ul>
 
-      <div class="honest" role="note">
-        <p>用量页只给你看用了百分之几、什么时候重置，不公布 token 数。大、中、小是经验规则，不是厂商给的数字。</p>
-      </div>
+      <ol class="num-key">
+        <li><strong>Session</strong> — % used or left this window</li>
+        <li><strong>Resets in</strong> — time until this window resets (skip if unused / blank)</li>
+        <li><strong>Weekly</strong> — % + weekday &amp; time it resets</li>
+      </ol>
 
-      <p class="msg info" id="restore-note" hidden>已带回你在这个标签页里填过的内容。重置时间可能已经变了，对照用量页确认后，再点「算一下」。</p>
+      <p class="msg info" id="restore-note" hidden>Brought back what you typed in this tab. Reset times may have changed — check Usage, then Calculate.</p>
 
       <form id="calc-form" novalidate>
-        <label class="field" for="claude-plan">你订的是哪一档？
+        <label class="field" for="claude-plan">Which plan?
           <select id="claude-plan">
-            <option value="">选一下</option>
+            <option value="">Choose</option>
             <option value="pro">Pro</option>
-            <option value="max5">Max（5 倍）</option>
-            <option value="max20">Max（20 倍）</option>
-            <option value="team">团队版 / 企业版</option>
-            <option value="other">其他会员档</option>
-            <option value="api">我是按 API 用量付钱的</option>
+            <option value="max5">Max (5×)</option>
+            <option value="max20">Max (20×)</option>
+            <option value="team">Team / Enterprise</option>
+            <option value="other">Other plan</option>
+            <option value="api">API billing</option>
           </select>
         </label>
-        <p class="msg warn" id="claude-api" hidden>按 API 用量付钱没有「窗口」，用量页上没有这三个百分比，这个工具不适用。</p>
+        <p class="msg warn" id="claude-api" hidden>API billing has no session/weekly window — this tool doesn’t apply.</p>
 
-        <figure class="usage-map">
-          <figcaption><strong>示意图</strong>，不是你的用量页，也不是截图。编号和下面要填的格子一样。72%、3 小时 12 分、周四 8:00 都是例子，换成你页面上的数。</figcaption>
+        <details class="usage-map">
+          <summary>Show usage page map</summary>
+          <p class="hint">Example numbers, not a real screenshot. The fields below use the same numbers.</p>
           <div class="map-grid">
             <div class="map-block" data-slot="1" data-pct="72">
-              <p class="map-k"><span class="map-mark">①</span> <span class="mode-label" data-used="5 小时额度 · 已经用了" data-left="5 小时额度 · 还剩">5 小时额度 · 已经用了</span> <span class="en">Session</span></p>
+              <p class="map-k"><span class="map-mark">①</span> <span class="mode-label" data-used="Session — % used" data-left="Session — % left">Session — % used</span></p>
               <p class="map-v">72%</p>
               <span class="demo-bar" aria-hidden="true"><i class="demo-fill-72"></i></span>
             </div>
             <div class="map-block" data-slot="2" data-hours="3" data-minutes="12">
-              <p class="map-k"><span class="map-mark">②</span> 这段还要多久重置 <span class="en">Resets in</span></p>
-              <p class="map-v">3 小时 12 分钟</p>
+              <p class="map-k"><span class="map-mark">②</span> Resets in</p>
+              <p class="map-v">3 hr 12 min</p>
             </div>
             <div class="map-block" data-slot="3" data-pct="31" data-day="4" data-clock="08:00">
-              <p class="map-k"><span class="map-mark">③</span> <span class="mode-label" data-used="每周额度 · 已经用了，" data-left="每周额度 · 还剩，">每周额度 · 已经用了，</span> <span class="en">Weekly</span><br>周几几点重置</p>
-              <p class="map-v">31% · 周四 8:00</p>
+              <p class="map-k"><span class="map-mark">③</span> <span class="mode-label" data-used="Weekly — % used" data-left="Weekly — % left">Weekly — % used</span></p>
+              <p class="map-v">31% · Thu 8:00</p>
               <span class="demo-bar" aria-hidden="true"><i class="demo-fill-31"></i></span>
             </div>
           </div>
-        </figure>
+        </details>
 
-        <fieldset class="service" id="svc-claude" aria-label="Claude 用量">
+        <fieldset class="service" id="svc-claude" aria-label="Claude usage">
           <div class="svc-body" id="claude-body">
-            <div class="copy-grid" id="services"><!-- 由 js/app.js 生成 ①②③ --></div>
+            <div class="copy-grid" id="services"><!-- filled by js/app.js --></div>
           </div>
         </fieldset>
         <div class="calc-actions">
-          <button type="button" class="secondary" id="example-btn">填示例试试</button>
-          <button type="submit" class="primary" id="calc-btn">算一下</button>
+          <button type="button" class="secondary" id="example-btn">Try sample</button>
+          <button type="submit" class="primary" id="calc-btn">Calculate</button>
         </div>
       </form>
 
       <div id="calc-results" class="results" aria-live="polite"></div>
 
       <details class="rules">
-        <summary>档位是怎么算的？（经验规则）</summary>
+        <summary>How is the band chosen?</summary>
         <ol>
-          <li>5 小时额度还剩多少、每周额度还剩多少，<strong>取少的那个</strong>，叫「有效剩余」。</li>
-          <li><strong>大档</strong>：两个都剩 50% 以上（不含 50%），<strong>并且</strong>离每周额度重置还有 1 天以上。</li>
-          <li><strong>中档</strong>：有一个剩 20%–50%。两个都剩 50% 以上、但每周额度 1 天内就重置的，也只算中档。</li>
-          <li><strong>小档</strong>：有一个剩不到 20%，<strong>或者</strong>离每周额度重置只剩几小时（不到 5 小时）。</li>
-          <li>同时符合两条的，按小的那个算，不会往大了算。剩 0 → 先别开新项目，等重置。</li>
-          <li>5 小时额度本来就几个小时重置一次，它的重置时间不影响档位；只是卡在它上面、它又快重置时，会提醒你重置后再算一次。</li>
-          <li>小档：大约 15–30 分钟，聊几轮就够。中档：大约 1 小时，来回聊十几轮。大档：大约 2–3 小时，可以分几次做完。</li>
-          <li>只看百分比，不看你订的是哪一档。同样剩 50%，贵的档能做的事更多，但具体多多少厂商没公布，我们也不假装知道。</li>
+          <li>Session left and Weekly left: <strong>the smaller one</strong> is the effective left.</li>
+          <li><strong>Large</strong>: both over 50% (50% itself is not over), <strong>and</strong> more than 1 day until the weekly reset.</li>
+          <li><strong>Medium</strong>: one window is 20%–50% left. Both over 50% but the weekly reset is within 1 day is also Medium.</li>
+          <li><strong>Small</strong>: one window is under 20% left, <strong>or</strong> only a few hours until the weekly reset (under 5 hours).</li>
+          <li>If two rules match, use the smaller band. Nothing left means wait for a reset before a new project.</li>
+          <li>Session resets every few hours, so its countdown does not change the band. If you’re limited by Session and it resets soon, a note says to calculate again after it resets.</li>
+          <li>Small is about 15–30 minutes. Medium is about an hour. Large is about 2–3 hours, sometimes across more than one sitting.</li>
+          <li>The band uses the percentages only, not which plan you pay for. The same 50% left can do more on a higher plan; that gap isn’t published.</li>
         </ol>
       </details>
     </section>
 
-    <!-- ============ 第 2 步：短问卷 ============ -->
     <section id="quiz" class="step" aria-labelledby="quiz-title">
-      <h2 id="quiz-title"><span class="num">2</span>说说你想做什么<small>（自愿，可以跳过）</small></h2>
-      <p class="privacy">你的回答只存在这个浏览器标签页里，只用来给项目排顺序，不会发到任何地方，关掉标签页就没了。我们不做统计，也不要账号。</p>
-      <p class="skip-row">每一题都可以不答。不想答？<button type="button" id="skip-btn" class="secondary">跳过，直接看推荐</button>不填也会按你的剩余档位推荐。</p>
+      <h2 id="quiz-title"><span class="num">2</span>Preferences <small>(optional)</small></h2>
+      <p class="privacy">Answers stay in this tab until you close it.</p>
+      <p class="skip-row"><button type="button" id="skip-btn" class="secondary">Skip to recommendations</button></p>
 
       <form id="quiz-form" novalidate>
         <fieldset class="q">
-          <legend><span class="qn">问题 1</span> 你想在哪方面用？（可以多选）</legend>
-          <div class="chips" id="q-domains"><!-- 由 js/app.js 按领域列表生成 --></div>
-          <label class="field other">其他，我自己写：
-            <input type="text" id="q-other" maxlength="40" autocomplete="off" placeholder="比如：养宠物、带孩子">
+          <legend><span class="qn">Question 1</span> What do you want to use it for? (pick any)</legend>
+          <div class="chips" id="q-domains"></div>
+          <label class="field other">Something else:
+            <input type="text" id="q-other" maxlength="40" autocomplete="off" placeholder="e.g. pets, childcare">
           </label>
         </fieldset>
 
         <fieldset class="q">
-          <legend><span class="qn">问题 2</span> 最近想做的一件事？</legend>
+          <legend><span class="qn">Question 2</span> One thing you want to do soon?</legend>
           <label class="field">
-            <span class="hint">一句话就行，随便写。写了的话，我们会多给你一张按这件事做的项目卡。</span>
-            <input type="text" id="q-wish" maxlength="80" autocomplete="off" placeholder="比如：给妈妈过 60 岁生日、学会做三道家常菜">
+            <span class="hint">One sentence is enough. If you write it, we’ll add a project card for that.</span>
+            <input type="text" id="q-wish" maxlength="80" autocomplete="off" placeholder="e.g. Mom’s 60th birthday, learn three recipes">
           </label>
         </fieldset>
 
         <fieldset class="q">
-          <legend><span class="qn">问题 3</span> 这次想要一个什么样的成果？（可以多选）</legend>
-          <div class="chips" id="q-outputs"><!-- 由 js/app.js 按成果列表生成 --></div>
+          <legend><span class="qn">Question 3</span> What should you have when it’s done? (pick any)</legend>
+          <div class="chips" id="q-outputs"></div>
         </fieldset>
 
         <fieldset class="q">
-          <legend><span class="qn">问题 4</span> 这次是给谁做的？（可以多选）</legend>
-          <div class="chips" id="q-audiences"><!-- 由 js/app.js 按列表生成 --></div>
-        </fieldset>
-
-        <fieldset class="q">
-          <legend><span class="qn">问题 5</span> 你订了哪个服务？这次用哪个的剩余？</legend>
-          <div class="chips">
-            <label class="chip"><input type="radio" name="q-service" value="claude"> Claude</label>
-            <label class="chip"><input type="radio" name="q-service" value="chatgpt"> ChatGPT（Codex）</label>
-          </div>
-          <p class="hint">这一版第 1 步只抄 Claude。选了 ChatGPT 也不会去读它的用量，算不出剩余，下面就没有项目。两个额度不会加在一起。</p>
+          <legend><span class="qn">Question 4</span> Who is this for? (pick any)</legend>
+          <div class="chips" id="q-audiences"></div>
         </fieldset>
 
         <div class="clear-row">
-          <button type="button" id="clear-btn" class="secondary">清除我的回答</button>
-          <p class="hint">会清掉这一页上你填过的所有东西：问卷回答、第 1 步的数字、做完的记录。</p>
+          <button type="button" id="clear-btn" class="secondary">Clear my answers</button>
+          <p class="hint">Clears quiz answers, step 1 numbers, and finished projects.</p>
           <p class="msg ok" id="clear-msg" role="status" hidden></p>
         </div>
       </form>
     </section>
 
-    <!-- ============ 第 3 步：项目推荐 ============ -->
     <section id="recs" class="step" aria-labelledby="recs-title">
-      <h2 id="recs-title" tabindex="-1"><span class="num">3</span>挑一个项目，做完它</h2>
+      <h2 id="recs-title" tabindex="-1"><span class="num">3</span>Pick a project</h2>
 
       <div id="done-banner" class="done-banner" role="status" hidden>
-        <p class="done-title" id="done-title"></p>
-        <p>下一步：回到用量页，把 ①②③ <strong>重新抄一遍</strong>，再点「算一下」。剩余变了，推荐会跟着变。点「我做完了」只是记一笔，不会自动消耗额度，也不会去读用量页。</p>
-        <p class="small" id="done-round"></p>
-        <button type="button" id="recalc-btn" class="primary">回到第 1 步重新算</button>
+        <p id="done-line">Nice — re-copy the three numbers from Usage, then Calculate again.</p>
+        <button type="button" id="recalc-btn" class="primary">Back to step 1</button>
       </div>
 
       <div id="recs-status" class="recs-status" aria-live="polite"></div>
       <div id="recs-list" class="cards"></div>
 
       <details id="recs-others" class="smaller" hidden>
-        <summary>同一档的其他项目，跟你的偏好没对上（<span id="others-count">0</span> 个）</summary>
+        <summary>Other projects in this band (<span id="others-count">0</span>)</summary>
         <div id="others-list" class="cards"></div>
       </details>
 
       <details id="recs-smaller" class="smaller" hidden>
-        <summary>想轻松一点？这些比你的剩余小，也可以做（<span id="smaller-count">0</span> 个）</summary>
+        <summary>Smaller than what’s left (<span id="smaller-count">0</span>)</summary>
         <div id="smaller-list" class="cards"></div>
       </details>
-
-      <p class="loop">看中一张就自己去做。做完后点「我做完了」——只记下这一笔，不会替你消耗额度，也不会去读用量页。然后回第 1 步把三个数重新抄一遍。</p>
     </section>
   </main>
 
   <footer class="foot">
     <div class="wrap">
-      <p>只在这个浏览器里算：不联网、不登录、不读 Claude 用量页，也不会自动消耗额度。你抄的数和问卷只留在这个标签页，关掉就没了；想马上清掉，点「清除我的回答」。推荐出来以后，要点卡片上的「我做完了」才记一笔，那一下也不会替你去做项目。</p>
+      <p>Runs only in this tab. Doesn’t read Claude Usage. Nothing starts until you click.</p>
     </div>
   </footer>
 

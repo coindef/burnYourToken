@@ -94,6 +94,13 @@ h1, h2, h3 { line-height: 1.35; text-wrap: balance; }
   font-size: 13px;
 }
 .loop-line { margin: 0; color: var(--muted); font-size: 14px; }
+.num-key { margin: 10px 0 4px; padding-left: 1.25em; }
+.num-key li { margin: 4px 0; }
+details.usage-map { margin-top: 12px; }
+details.usage-map summary { cursor: pointer; font-weight: 600; color: var(--accent-dark); }
+details.usage-map .map-grid { margin-top: 8px; }
+.empty-title { margin: 8px 0 0; font-weight: 700; }
+.empty-hint { margin: 4px 0 0; color: var(--muted); }
 
 /* ---------- 每一步 ---------- */
 .step {
@@ -140,43 +147,6 @@ h1, h2, h3 { line-height: 1.35; text-wrap: balance; }
 .copy-path li { display: block; }
 .copy-path li + li::before { content: "→ "; font-weight: 600; }
 .copy-aside { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
-.num-key {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-.num-key li {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin: 0;
-  min-width: 0;
-}
-.num-key li > span:last-child { min-width: 0; }
-.en {
-  display: inline-block;
-  margin: 0 4px;
-  padding: 0 6px;
-  border-radius: 6px;
-  background: var(--info-bg);
-  color: var(--accent-dark);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.45;
-  vertical-align: 1px;
-}
-.empty-guide {
-  margin-top: 14px;
-  padding: 14px 14px 6px;
-  border: 1px dashed #b9b2a4;
-  border-radius: var(--radius);
-  background: #fcfbf8;
-}
-.empty-guide .empty-title { margin: 0 0 6px; font-weight: 700; }
-.empty-guide p:last-child { margin-bottom: 8px; }
-.msg.empty-guide { color: var(--text); }
 
 .usage-map { margin: 14px 0 0; padding: 0; }
 .usage-map figcaption { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
@@ -414,7 +384,14 @@ button {
 .card.band-small { border-top: 5px solid var(--small); }
 .card.band-medium { border-top: 5px solid var(--medium); }
 .card.band-large { border-top: 5px solid var(--large); }
-.card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.card .time { font-size: 14px; color: var(--muted); }
+.card .k { font-weight: 700; font-size: 14px; color: var(--accent-dark); }
+.card .why { margin: 4px 0 8px; }
+.card .done-when { margin: 0 0 12px; }
+.card .done-when .k { margin-right: 4px; }
+.card .steps { margin: 0 0 12px; }
+.card .steps summary { cursor: pointer; font-weight: 600; color: var(--accent-dark); }
 .card .domain { font-size: 14px; color: var(--muted); }
 .card h3 { margin: 8px 0 6px; font-size: 18px; }
 .card dl { margin: 0 0 12px; flex: 1; }
@@ -437,8 +414,8 @@ button {
 .why-pref ul { color: var(--accent-dark); }
 .why-none { color: var(--muted); font-size: 14px; }
 #recs-title:focus { outline: none; }
-.done-btn { background: #fff; border: 1px solid var(--accent); color: var(--accent-dark); font-weight: 600; width: 100%; }
-.done-btn:hover { background: var(--info-bg); }
+.done-btn { background: var(--accent); border: 1px solid var(--accent); color: #fff; font-weight: 600; width: 100%; }
+.done-btn:hover { background: var(--accent-dark); }
 
 .done-banner {
   margin: 10px 0 14px;
@@ -461,5 +438,5 @@ button {
   .top { padding: 40px 0 28px; }
   .top h1 { font-size: 32px; }
   .step { padding: 26px 28px; }
-  .map-grid, .copy-grid, .num-key { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+  .map-grid, .copy-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
 }
