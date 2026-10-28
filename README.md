@@ -1,6 +1,32 @@
 # burnYourToken
 
-Copy three numbers from Claude Usage. We’ll suggest a project that fits what’s left.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![GitHub stars](https://img.shields.io/github/stars/coindef/burnYourToken)](https://github.com/coindef/burnYourToken/stargazers)
+
+**Unused Claude quota?**
+
+Fill from Usage → **ONE PICK** → **Mark done**. Nothing auto-burns.
+
+Free OSS · local · Chrome extension
+
+<img src="docs/demo.png" alt="Unused Claude quota? IDLE / UNUSED." width="360">
+
+<!-- TODO: replace docs/demo.png with docs/demo.gif (8–15s) in a follow-up. Core loop only: Unused quota → Fill → ONE PICK → Mark done. English on screen. -->
+
+### Load unpacked (30 seconds)
+
+1. `chrome://extensions` → Developer mode → Load unpacked → select `extension/`
+2. Open Claude → Settings → Usage (`https://claude.ai/settings/usage`) and leave the tab open
+3. Run `sh scripts/serve.sh` → open http://127.0.0.1:8000/ → **Fill from Claude Usage** → choose a plan → **Get project** → pick the one card → **Mark done**
+
+Without the extension: copy **Session**, **Resets in**, and **Weekly** by hand.
+
+## What it does
+
+- **Fill** reads the open Usage tab only when you click **Fill from Claude Usage**. It copies **Session**, **Resets in**, and **Weekly**. It does not calculate, and it does not mark a project done.
+- **One** full-width recommendation. **Get project** is the click that shows it. The main path does not add a second card.
+- **Mark done** is explicit. The project stays unfinished until you click it.
+
+Monitors show quota. This fills idle quota into **one** project, then **Mark done**.
 
 ## Run
 
@@ -10,49 +36,39 @@ Python 3. No install and no build.
 sh scripts/serve.sh
 ```
 
-Open http://127.0.0.1:8000/
+Open http://127.0.0.1:8000/. Another port: `PORT=8765 sh scripts/serve.sh`. Stop with Ctrl+C in that window.
 
-Another port: `PORT=8765 sh scripts/serve.sh`. Stop it with Ctrl+C in that window.
+The server listens on `127.0.0.1` only.
 
-You can also open `index.html` directly (`xdg-open index.html` on Linux, `open index.html` on macOS). The page only loads `css/` and `js/` next to it.
+You can open `index.html` directly. It only loads `css/` and `js/` next to it. If the extension should work on that `file://` page, open the extension’s details and turn on **Allow access to file URLs**.
 
-## Fill from Claude Usage
+**Fill from Claude Usage** only copies the three numbers. Click **Get project** for the recommendation. **Try sample** under **More** fills the example numbers and runs **Get project**.
 
-Optional. Copying the three numbers by hand still works if you never load the extension.
+Leave a field blank and **Get project** marks that field. A percent outside 0–100 must be 0–100. **API billing** has no session or weekly window, so this tool does not apply.
 
-The extension does not calculate, does not mark a project done, and does not read Usage when the page loads. It does not call Claude. After you click **Fill from Claude Usage**, it reads the Usage tab you already have open.
+## Tests
 
-### Load the unpacked extension
-
-1. Open `chrome://extensions`.
-2. Turn on **Developer mode**.
-3. Click **Load unpacked** and choose the `extension` folder in this project.
-4. If you open `index.html` as a file instead of the local server, open that extension’s details and turn on **Allow access to file URLs**.
-5. In Chrome, open Claude → Settings → Usage and leave that tab open: `https://claude.ai/settings/usage`.
-6. Open this page, click **Fill from Claude Usage**, pick a plan, then click **Get project**.
-
-### Without the extension
-
-Copy **Session**, **Resets in**, and **Weekly** from Claude → Settings → Usage. **Try sample** under **More** still fills the example numbers and runs **Get project**.
-
-## Try it
-
-1. A first visit shows **Leftover Claude quota?**, **Fill from Usage, then Mark done.**, and **Fill from Claude Usage**. Plan, usage fields, and **Get project** stay hidden until Fill succeeds.
-2. After Fill, click **Get project**. Nothing runs until that click, and Fill does not mark a project done.
-3. One full-width recommendation appears, with band chips above it. Open **Show steps** if you want them, then click **Mark done**.
-4. **Try sample**, **How to copy**, **Preferences**, and **More projects** are under **More**. They are not a second card on the first screen.
-
-Leave a field blank and **Get project** marks that field. A percent outside 0–100 says it must be 0–100. **API billing** has no session or weekly window, so this tool doesn’t apply.
-
-## Tests (optional)
-
-Needs Chrome or Chromium. The script looks for the real browser. If `google-chrome` on your PATH is a wrapper and the run never finishes, set `CHROME` to the binary.
+Optional. Needs Chrome or Chromium. The script looks for the real browser. If `google-chrome` on your PATH is a wrapper and the run never finishes, set `CHROME` to the binary.
 
 ```sh
 sh tests/run.sh
 CHROME=/full/path sh tests/run.sh
 ```
 
-It only talks to `127.0.0.1`. A passing run exits 0.
+The tests only talk to `127.0.0.1`. A passing run exits 0.
 
-Earlier design notes are in `PROTOTYPE-REPORT.md` and `BURNYOURTOKEN-PREFERENCE-REPORT.md`. Those notes are historical. This page and the on-screen steps are the current product.
+## Privacy
+
+Local only. The page does not call the network. The extension does not call the Claude API. It reads the Usage tab you already have open, and only after you click **Fill from Claude Usage**. Preferences stay in this tab until you close it.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes local, keep this README in English, and keep **Fill**, **Get project**, and **Mark done** as separate clicks.
+
+## License
+
+[MIT](LICENSE)
+
+## Disclaimer
+
+Unofficial. Not affiliated with Anthropic.
