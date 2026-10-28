@@ -18,6 +18,19 @@
   const $ = id => D.getElementById(id);
   const text = node => (node ? node.textContent : '');
 
+  function isShown(node) {
+    if (!node || !node.isConnected) return false;
+    for (let n = node; n && n !== D.body; n = n.parentElement) {
+      if (n.hidden) return false;
+      if (n.tagName === 'DETAILS' && !n.open && n !== node) return false;
+      const cs = W.getComputedStyle(n);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    }
+    return true;
+  }
+
+  const shownButtons = () => Array.from(D.querySelectorAll('button')).filter(isShown);
+
   function loadApp(clearStorage) {
     return new Promise((resolve, reject) => {
       frame.onload = () => {
@@ -144,7 +157,11 @@
     ok(usage && usage.ok, 'fixture parses');
     return usage;
   }
-  const resultOf = p => D.querySelector('#calc-results .result[data-service="' + p + '"]');
+  function resultOf(p) {
+    const chips = $('band-chips');
+    if (chips && !chips.hidden && chips.dataset.service === p && chips.dataset.band) return chips;
+    return D.querySelector('#calc-results [data-service="' + p + '"]');
+  }
   const cards = () => Array.from(D.querySelectorAll('#recs-list .card'));
   const moreCards = () => Array.from(D.querySelectorAll('#more-list .card'));
   const whyOf = card => text(card.querySelector('.why-line'));
@@ -164,20 +181,24 @@
     ok(W.QP && W.QP.app, 'app.js 跑完了');
     ok($('svc-claude') && !$('svc-chatgpt'), '只有 Claude，没有 ChatGPT 卡');
     eq(D.querySelectorAll('input[name="q-domain"]').length, 7, '领域选项');
-    ok(statusText().indexOf('Calculate in step 1 to see projects.') !== -1, statusText());
+    eq(D.querySelector('main').dataset.phase, 'first', 'first visit');
+    ok(!isShown($('recs')), 'recommendations hidden on first visit');
+    ok(!isShown($('usage-fields')), 'plan and grid hidden on first visit');
+    eq(text($('calc-results')).trim(), '', 'no result copy on first visit');
     eq(D.getElementById('clear-btn').textContent.trim(), 'Clear my answers', '清除按钮');
     eq(D.querySelectorAll('input[name="q-service"]').length, 0, '没有服务题');
     ok(!D.querySelector('input[value="chatgpt"]'), '没有 ChatGPT');
-    const results = text($('calc-results'));
-    ok(results.indexOf('Nothing calculated yet.') !== -1, results);
-    ok(results.indexOf('Paste Session / Resets in / Weekly from Usage, or try the sample.') !== -1, results);
+    eq(D.querySelectorAll('#calc-results .result, #calc-results .card').length, 0, 'no result card');
     const how = D.querySelector('details.how-copy');
     ok(how && !how.open, 'How to copy starts closed');
+    ok(!isShown(how), 'How to copy is in overflow');
     eq(how.querySelector('summary').textContent.trim(), 'How to copy');
     ok(how.querySelector('.copy-path') && how.querySelector('.num-key') && how.querySelector('.usage-map'), 'copy path, key, and map are one fold');
     const prefs = D.querySelector('#quiz details.prefs');
     ok(prefs && !prefs.open, 'preferences start closed');
+    ok(!isShown(prefs), 'preferences are off the main path');
     eq(prefs.querySelector('summary').textContent.trim(), 'Preferences (optional)');
+    ok($('overflow') && !$('overflow').open, 'overflow starts closed');
     eq(text(D.querySelector('.lead')).trim(), 'Fill from Usage, then Mark done.');
     ok(!D.querySelector('.jump') && !D.querySelector('.loop-line'), 'no jump nav or loop line');
     eq(text(D.querySelector('h1')).trim(), 'Leftover Claude quota?');
@@ -186,14 +207,17 @@
     eq(D.body.textContent.split('Nothing burns until you Mark done.').length - 1, 1, 'honesty once');
     ok(D.body.textContent.indexOf('Doesn\u2019t read Claude Usage') === -1, 'old honesty gone');
     eq($('fill-usage-btn').textContent.trim(), 'Fill from Claude Usage');
-    eq($('fill-usage-btn').nextElementSibling.id, 'calc-btn', 'Calculate follows Fill');
-    eq($('calc-btn').nextElementSibling.id, 'example-btn', 'Try sample sits beside Calculate');
+    eq($('calc-btn').textContent.trim(), 'Get project');
+    ok(!isShown($('calc-btn')), 'Get project hidden until Fill');
+    ok(!isShown($('example-btn')), 'Try sample stays in overflow');
+    eq(shownButtons().map(b => b.id).join(), 'fill-usage-btn', 'sole primary button');
     ok($('fill-usage-btn').classList.contains('primary'), 'Fill is primary');
-    ok($('calc-btn').classList.contains('secondary') && $('example-btn').classList.contains('secondary'), 'Calculate and Try sample stay secondary');
+    ok($('calc-btn').classList.contains('secondary') && $('example-btn').classList.contains('secondary'), 'Get project and Try sample stay secondary');
     eq($('fill-status').hidden, true, 'idle has no helper');
     eq($('fill-status').textContent, '', 'idle copy empty');
     eq($('claude-s-pct').value, '', 'does not fill on load');
     ok(!/[\u4e00-\u9fff]/.test(D.body.textContent), '页面没有中文');
+    ok(!/\$\d/.test(D.body.textContent), 'no savings numbers on first visit');
   });
 
   test('从 Claude 用量页抄三个数：三行路径、①②③ 对照、Try sample 填好并算出推荐', async () => {
@@ -222,8 +246,9 @@
     eq($('claude-w-clock').value, D.querySelector('.map-block[data-slot="3"]').getAttribute('data-clock'), '③ 几点');
     ok(D.querySelector('input[name="claude-mode"][value="used"]').checked, '按已经用了填');
     eq(resultOf('claude').dataset.band, 'medium', '示例一点就算出中档');
-    ok(cards().length > 0, 'Try sample 直接出推荐');
-    ok(text(resultOf('claude')).indexOf('One window is only 20%–50% left') !== -1, '结果写明是哪条规则');
+    ok(text($('band-chips')).indexOf('Medium') !== -1 && text($('band-chips')).indexOf('About an hour') !== -1, 'band chips');
+    eq(cards().length, 1, 'Try sample 直接出一张推荐');
+    eq(D.querySelectorAll('#calc-results .result, #calc-results .card').length, 0, 'results are chips, not a card');
 
     setVal('claude-plan', 'max20');
     $('example-btn').click();
@@ -235,6 +260,7 @@
     ok(!$('claude-body').hidden, '格子又打开');
     eq($('claude-s-pct').value, '72', '① 还是示例');
 
+    $('overflow').open = true;
     D.querySelector('details.how-copy').open = true;
     await wait(50);
     async function aligned(width) {
@@ -261,7 +287,8 @@
     eq($('claude-w-pct').value, '', 'weekly still empty');
     eq($('fill-status').textContent, '', 'no status on load');
     ok($('fill-status').hidden, 'status hidden on load');
-    ok(text($('calc-results')).indexOf('Nothing calculated yet.') !== -1, 'no calculate on load');
+    eq(text($('calc-results')).trim(), '', 'no calculate on load');
+    eq(D.querySelector('main').dataset.phase, 'first', 'still first visit');
     eq($('done-banner').hidden, true, 'no mark done on load');
     eq(W.QP.app.state.done.length, 0, 'nothing marked done');
     ok(!D.querySelector('dialog'), 'status is not a modal');
@@ -272,7 +299,9 @@
     await wait(1700);
     eq($('fill-status').textContent, FILL_NO_EXT, 'no extension');
     eq($('claude-s-pct').value, '', 'still empty');
-    ok(text($('calc-results')).indexOf('Nothing calculated yet.') !== -1, 'no extension does not calculate');
+    eq(text($('calc-results')).trim(), '', 'no extension does not calculate');
+    eq(D.querySelector('main').dataset.phase, 'first', 'failed Fill stays on the first screen');
+    ok(!isShown($('usage-fields')), 'failed Fill does not reveal fields');
 
     const usage = fixtureUsage();
     let release = null;
@@ -297,20 +326,47 @@
     eq($('claude-w-clock').value, usage.weeklyClock, 'weekly time');
     ok(D.querySelector('input[name="claude-mode"][value="used"]').checked, 'percent used');
     eq($('fill-status').textContent, FILL_OK, 'success');
-    ok(text($('calc-results')).indexOf('Nothing calculated yet.') !== -1, 'fill does not calculate');
+    eq(text($('calc-results')).trim(), '', 'fill does not calculate');
+    eq(W.QP.app.state.computedAt, null, 'Fill does not Get project');
+    eq(D.querySelector('main').dataset.phase, 'filled', 'fields after Fill');
+    ok(isShown($('usage-fields')), 'plan and grid revealed');
+    ok(isShown($('calc-btn')) && $('calc-btn').textContent.trim() === 'Get project', 'sole secondary CTA');
+    eq(shownButtons().filter(b => b.classList.contains('secondary')).map(b => b.id).join(), 'calc-btn', 'no other secondary CTA');
+    ok(!isShown($('example-btn')), 'Try sample still in overflow');
+    eq($('band-chips').hidden, true, 'no chips before Get project');
+    ok(!isShown($('recs')), 'no hero before Get project');
     eq($('done-banner').hidden, true, 'fill does not mark done');
     eq(W.QP.app.state.done.length, 0, 'done list empty');
     eq(cards().length, 0, 'no project cards yet');
 
     calc();
     eq(resultOf('claude').dataset.band, 'medium', 'filled numbers calculate');
-    ok(cards().length > 0, 'recommendations after Calculate');
+    eq(D.querySelector('main').dataset.phase, 'project', 'after Get project');
+    eq(cards().length, 1, 'exactly one hero');
+    ok(cards()[0].classList.contains('hero'), 'hero card');
+    eq(cards()[0].querySelectorAll('h3').length, 1, 'title');
+    ok(whyOf(cards()[0]).length > 0, 'one-line why');
+    eq(cards()[0].querySelector('.done-btn').textContent.trim(), 'Mark done');
+    ok(isShown($('band-chips')), 'band chips above the hero');
+    const chipBoxes = Array.from($('band-chips').querySelectorAll('.band-chip')).map(n => n.getBoundingClientRect());
+    eq(chipBoxes.length, 2, 'two chips');
+    ok(Math.abs(chipBoxes[0].top - chipBoxes[1].top) < 4, 'chips sit on one line');
+    eq(D.querySelectorAll('#recs-list .card').length, 1, 'main list is one card');
+    eq(Array.from(D.querySelectorAll('.card')).filter(isShown).length, 1, 'no second visible card');
+    eq(D.querySelectorAll('#calc-results .result, #calc-results .card').length, 0, 'result area is not a card');
+    ok(chipBoxes[0].bottom <= cards()[0].getBoundingClientRect().top + 1, 'chips sit above the hero');
+    const heroStyle = W.getComputedStyle(cards()[0]);
+    ok(heroStyle.boxShadow && heroStyle.boxShadow !== 'none', 'hero shadow');
+    ok(parseFloat(heroStyle.borderTopWidth) >= 4, 'top accent bar');
+    ok(cards()[0].getBoundingClientRect().width >= D.querySelector('main').getBoundingClientRect().width - 48, 'full-width hero');
+    ok(moreCards().length > 0 && !isShown($('recs-more')), 'more projects stay collapsed in overflow');
+    ok(!/\$\d/.test(D.body.textContent), 'no savings numbers');
     eq($('fill-status').textContent, FILL_OK, 'calculate does not clear success');
 
     setVal('claude-s-pct', '70');
     eq($('fill-status').hidden, true, 'next edit clears success');
     eq($('fill-status').textContent, '', 'helper gone');
-    ok(text($('calc-results')).indexOf('Click Calculate to update') !== -1, 'edit does not recalculate');
+    ok(text($('calc-results')).indexOf('Click Get project to update') !== -1, 'edit does not recalculate');
     eq(resultOf('claude').dataset.band, 'medium', 'old band stays until Calculate');
 
     installUsageBridge(() => ({ ok: true, usage: usage }));
@@ -318,7 +374,7 @@
     await flushFill();
     eq($('claude-s-pct').value, '72', 'filled again');
     eq($('fill-status').textContent, FILL_OK, 'success again');
-    ok(text($('calc-results')).indexOf('Click Calculate to update') !== -1, 'second fill does not calculate');
+    ok(text($('calc-results')).indexOf('Click Get project to update') !== -1, 'second fill does not calculate');
     eq(resultOf('claude').dataset.band, 'medium', 'band unchanged');
     await wait(2200);
     eq($('fill-status').hidden, true, 'success clears after about 2s');
@@ -432,9 +488,8 @@
     calc();
     const r = resultOf('claude');
     eq(r && r.dataset.band, 'small', '档位');
-    ok(text(r).indexOf('Limited by Session') !== -1, '写明瓶颈');
-    ok(text(r).indexOf('effective left 15%') !== -1, '有效剩余 15%');
-    ok(text(r).indexOf('One window is under 20% left') !== -1, '写明是哪条规则');
+    ok(text(r).indexOf('Small') !== -1 && text(r).indexOf('About 15–30 minutes') !== -1, 'band chips');
+    eq(D.querySelectorAll('#calc-results .result').length, 0, 'not a result card');
     eq(cards().length, 1, '主列表一张');
     eq(cards()[0].dataset.band, 'small', '卡片档位');
     ok(moreCards().length > 0 && moreCards().every(c => c.dataset.band === 'small'), '其余同档在 More projects');
@@ -448,8 +503,7 @@
     calc();
     const r = resultOf('claude');
     eq(r.dataset.band, 'medium', '档位');
-    ok(text(r).indexOf('effective left 20%') !== -1, '有效剩余 20%');
-    ok(text(r).indexOf('One window is only 20%–50% left') !== -1, '写明是哪条规则');
+    ok(text(r).indexOf('Medium') !== -1 && text(r).indexOf('About an hour') !== -1, 'band chips');
     eq(cards().length, 1, '主列表一张');
     eq(cards()[0].dataset.band, 'medium', '主推荐是中档');
     ok(moreCards().some(c => c.dataset.band === 'medium'), '其余中档在折叠里');
@@ -461,7 +515,7 @@
     fill('claude', { s: 30, w: 40 });
     calc();
     eq(resultOf('claude').dataset.band, 'large', '档位');
-    ok(text(resultOf('claude')).indexOf('more than 1 day away') !== -1, '写明是哪条规则');
+    ok(text(resultOf('claude')).indexOf('Large') !== -1 && text(resultOf('claude')).indexOf('About 2–3 hours') !== -1, 'band chips');
     eq(cards().length, 1, '主列表一张');
     eq(cards()[0].dataset.band, 'large', '主推荐是大档');
     ok(!$('recs-more').hidden, '有 More projects');
@@ -475,7 +529,7 @@
     calc();
     const r = resultOf('claude');
     eq(r.dataset.band, 'small', '档位');
-    ok(text(r).indexOf('only a few hours remain until the weekly reset (under 5 hours)') !== -1, '写明原因');
+    ok(text(r).indexOf('Small') !== -1, 'band chip');
     cards().forEach(c => eq(c.dataset.band, 'small', '卡片档位'));
   });
 
@@ -485,7 +539,7 @@
     calc();
     const r = resultOf('claude');
     eq(r.dataset.band, 'medium', '档位');
-    ok(text(r).indexOf('weekly reset is under 1 day') !== -1, '写明原因');
+    ok(text(r).indexOf('Medium') !== -1, 'band chip');
     cards().forEach(c => eq(c.dataset.band, 'medium', '卡片档位'));
   });
 
@@ -502,7 +556,7 @@
     calc();
     const r = resultOf('claude');
     eq(r.dataset.band, 'medium', '档位');
-    ok(text(r).indexOf('could be Large') !== -1, '有提醒');
+    ok(text(r).indexOf('Medium') !== -1 && text(r).indexOf('About an hour') !== -1, 'band chips');
   });
 
   test('问卷 → 推荐：选旅行只出旅行；换成健康就跟着变；档位不变', async () => {
@@ -654,7 +708,7 @@
       done.push(c.dataset.id);
       c.querySelector('.done-btn').click();
       ok(!$('done-banner').hidden, '出现「做完了」');
-      ok(text($('done-banner')).indexOf('Nice — re-copy the three numbers from Usage, then Calculate again.') !== -1, text($('done-banner')));
+      ok(text($('done-banner')).indexOf('Nice — re-copy the three numbers from Usage, then Get project again.') !== -1, text($('done-banner')));
       eq($('recalc-btn').textContent.trim(), 'Back to step 1');
       eq(cards().length, 0, '重新算之前不推');
     }
@@ -733,7 +787,7 @@
     calc();
     eq($('claude-s-pct').getAttribute('aria-invalid'), 'true', '百分比标红');
     eq($('claude-w-day').getAttribute('aria-invalid'), 'true', '周几标红');
-    ok(resultOf('claude').classList.contains('result-error'), '显示错误');
+    ok(resultOf('claude') && !resultOf('claude').classList.contains('result') && !resultOf('claude').classList.contains('card'), 'error is not a card');
     ok(text(resultOf('claude')).indexOf('Missing Session / Resets in / Weekly') !== -1, '结果标题');
     ok(text(resultOf('claude')).indexOf('Session % must be 0–100.') !== -1, 'Session 百分比');
     ok(text(resultOf('claude')).indexOf('Weekday is empty.') !== -1, '周几');
@@ -769,10 +823,10 @@
     fill('claude', { s: 30, w: 40 });
     calc();
     setVal('claude-s-pct', '90');
-    ok(text($('calc-results')).indexOf('Click Calculate to update') !== -1, '第 1 步提示');
-    ok(statusText().indexOf("haven't clicked Calculate") !== -1, '第 3 步提示');
+    ok(text($('calc-results')).indexOf('Click Get project to update') !== -1, '第 1 步提示');
+    ok(statusText().indexOf("haven't clicked Get project") !== -1, '第 3 步提示');
     calc();
-    ok(statusText().indexOf("haven't clicked Calculate") === -1, '算完提示消失');
+    ok(statusText().indexOf("haven't clicked Get project") === -1, '算完提示消失');
   });
 
   test('全角数字（中文输入法）能算', async () => {
@@ -822,8 +876,10 @@
     eq(D.querySelectorAll('input[name="q-output"]:checked, input[name="q-audience"]:checked').length, 0, '成果、给谁');
     eq($('q-other').value + $('q-wish').value, '', '自己写的');
     eq(D.querySelectorAll('input[name="q-service"]').length, 0, '没有服务题');
-    ok(text($('calc-results')).indexOf('Nothing calculated yet.') !== -1, '计算结果回到空状态');
-    ok(text($('calc-results')).indexOf('effective left') === -1, '没有留下上次的结果');
+    eq(text($('calc-results')).trim(), '', '计算结果回到空状态');
+    eq(D.querySelector('main').dataset.phase, 'first', '清除后回到第一屏');
+    ok(!isShown($('usage-fields')), 'plan and grid hidden again');
+    ok($('band-chips').hidden, 'chips hidden');
     ok($('done-banner').hidden, '做完提示');
     eq(cards().length, 0, '推荐');
     eq(W.sessionStorage.getItem('qp-v0'), null, '存的东西');
@@ -895,6 +951,7 @@
     pick('input[name="q-output"][value="text"]');
     pick('input[name="q-audience"][value="family"]');
     setVal('q-wish', '给妈妈过 60 岁生日，想做一本相册');
+    $('overflow').open = true;
     $('recs-more').open = true;
     D.querySelector('details.how-copy').open = true;
     D.querySelector('#quiz details.prefs').open = true;

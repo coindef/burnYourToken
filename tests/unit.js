@@ -671,5 +671,46 @@
     ), now).ok, false, 'used and left disagree');
   });
 
+  test('onboarding view: first screen, after Fill, after Get project', () => {
+    const first = C.onboardingView('first');
+    eq(first.lead, 'Leftover Claude quota?');
+    eq(first.sub, 'Fill from Usage, then Mark done.');
+    eq(first.primaryLabel, 'Fill from Claude Usage');
+    eq(first.showPlanAndGrid, false, 'plan and grid hidden');
+    eq(first.showGetProject, false, 'Get project hidden');
+    eq(first.heroCount, 0, 'no hero yet');
+    eq(first.showBandChips, false, 'no chips yet');
+    eq(first.preferencesOnMainPath, false, 'preferences off the main path');
+    eq(first.overflowOpenByDefault, false, 'overflow starts closed');
+    eq(first.autoGetProject, false, 'Fill does not auto Get project');
+    eq(first.autoMarkDone, false, 'no auto Mark done');
+    eq(first.showSavings, false, 'no savings numbers');
+    eq(first.resultIsCard, false, 'results are not a card');
+    eq(first.secondRecommendationCard, false, 'no second card');
+    eq(first.overflow.join(), 'try-sample,how-to-copy,preferences,more-projects');
+    eq(first.footer, 'Runs only in this tab. Only reads Usage after you click Fill. Nothing burns until you Mark done.');
+
+    const filled = C.onboardingView('filled');
+    eq(filled.showPlanAndGrid, true, 'fields after Fill');
+    eq(filled.showGetProject, true, 'Get project after Fill');
+    eq(filled.getProjectLabel, 'Get project');
+    eq(filled.heroCount, 0, 'Get project is a click, not automatic');
+    eq(filled.showBandChips, false);
+    eq(filled.autoGetProject, false);
+    eq(filled.preferencesOnMainPath, false);
+
+    const project = C.onboardingView('project');
+    eq(project.showPlanAndGrid, true);
+    eq(project.showGetProject, true);
+    eq(project.showBandChips, true, 'one line of band chips');
+    eq(project.heroCount, 1, 'exactly one hero');
+    eq(project.secondRecommendationCard, false);
+    eq(project.resultIsCard, false);
+    eq(project.showSavings, false);
+    eq(project.autoMarkDone, false);
+
+    eq(C.onboardingView('other'), null, 'unknown phase');
+  });
+
   window.addEventListener('load', () => runTests());
 })();

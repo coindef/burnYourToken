@@ -17,148 +17,160 @@
     </div>
   </header>
 
-  <main class="wrap">
-    <section id="calc" class="step" aria-labelledby="calc-title">
-      <h2 id="calc-title"><span class="num">1</span>Copy numbers</h2>
-      <details class="how-copy">
-        <summary>How to copy</summary>
-        <ol class="copy-path" aria-label="Open Usage">
-          <li>Claude</li>
-          <li>Settings</li>
-          <li>Usage</li>
-        </ol>
-
-        <ol class="num-key">
-          <li><strong>Session</strong> — % used or left this window</li>
-          <li><strong>Resets in</strong> — time until this window resets (skip if unused / blank)</li>
-          <li><strong>Weekly</strong> — % + weekday &amp; time it resets</li>
-        </ol>
-
-        <div class="usage-map">
-          <p class="hint">Example numbers, not a real screenshot. The fields below use the same numbers.</p>
-          <div class="map-grid">
-            <div class="map-block" data-slot="1" data-pct="72">
-              <p class="map-k"><span class="map-mark">①</span> <span class="mode-label" data-used="Session — % used" data-left="Session — % left">Session — % used</span></p>
-              <p class="map-v">72%</p>
-              <span class="demo-bar" aria-hidden="true"><i class="demo-fill-72"></i></span>
-            </div>
-            <div class="map-block" data-slot="2" data-hours="3" data-minutes="12">
-              <p class="map-k"><span class="map-mark">②</span> Resets in</p>
-              <p class="map-v">3 hr 12 min</p>
-            </div>
-            <div class="map-block" data-slot="3" data-pct="31" data-day="4" data-clock="08:00">
-              <p class="map-k"><span class="map-mark">③</span> <span class="mode-label" data-used="Weekly — % used" data-left="Weekly — % left">Weekly — % used</span></p>
-              <p class="map-v">31% · Thu 8:00</p>
-              <span class="demo-bar" aria-hidden="true"><i class="demo-fill-31"></i></span>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <p class="msg info" id="restore-note" hidden>Brought back what you typed in this tab. Reset times may have changed — check Usage, then Calculate.</p>
+  <main class="wrap" data-phase="first">
+    <section id="calc" class="focus" aria-labelledby="calc-title">
+      <h2 id="calc-title" class="visually-hidden"><span class="num">1</span>Copy numbers</h2>
 
       <form id="calc-form" novalidate>
-        <label class="field" for="claude-plan">Which plan?
-          <select id="claude-plan">
-            <option value="">Choose</option>
-            <option value="pro">Pro</option>
-            <option value="max5">Max (5×)</option>
-            <option value="max20">Max (20×)</option>
-            <option value="team">Team / Enterprise</option>
-            <option value="other">Other plan</option>
-            <option value="api">API billing</option>
-          </select>
-        </label>
-        <p class="msg warn" id="claude-api" hidden>API billing has no session/weekly window — this tool doesn’t apply.</p>
-
-        <fieldset class="service" id="svc-claude" aria-label="Claude usage">
-          <div class="svc-body" id="claude-body">
-            <div class="copy-grid" id="services"><!-- filled by js/app.js --></div>
-          </div>
-        </fieldset>
-        <div class="calc-actions">
+        <div class="calc-actions focus-actions">
           <button type="button" class="primary" id="fill-usage-btn">Fill from Claude Usage</button>
-          <button type="submit" class="secondary" id="calc-btn">Calculate</button>
-          <button type="button" class="secondary" id="example-btn">Try sample</button>
           <p id="fill-status" class="fill-status" role="status" hidden></p>
+        </div>
+
+        <div id="usage-fields" hidden>
+          <p class="msg info" id="restore-note" hidden>Brought back what you typed in this tab. Reset times may have changed — check Usage, then Get project.</p>
+
+          <label class="field" for="claude-plan">Which plan?
+            <select id="claude-plan">
+              <option value="">Choose</option>
+              <option value="pro">Pro</option>
+              <option value="max5">Max (5×)</option>
+              <option value="max20">Max (20×)</option>
+              <option value="team">Team / Enterprise</option>
+              <option value="other">Other plan</option>
+              <option value="api">API billing</option>
+            </select>
+          </label>
+          <p class="msg warn" id="claude-api" hidden>API billing has no session/weekly window — this tool doesn’t apply.</p>
+
+          <fieldset class="service" id="svc-claude" aria-label="Claude usage">
+            <div class="svc-body" id="claude-body">
+              <div class="copy-grid" id="services"><!-- filled by js/app.js --></div>
+            </div>
+          </fieldset>
+          <div class="calc-actions">
+            <button type="submit" class="secondary" id="calc-btn">Get project</button>
+          </div>
         </div>
       </form>
 
       <div id="calc-results" class="results" aria-live="polite"></div>
 
-      <details class="rules">
-        <summary>How is the band chosen?</summary>
-        <ol>
-          <li>Session left and Weekly left: <strong>the smaller one</strong> is the effective left.</li>
-          <li><strong>Large</strong>: both over 50% (50% itself is not over), <strong>and</strong> more than 1 day until the weekly reset.</li>
-          <li><strong>Medium</strong>: one window is 20%–50% left. Both over 50% but the weekly reset is within 1 day is also Medium.</li>
-          <li><strong>Small</strong>: one window is under 20% left, <strong>or</strong> only a few hours until the weekly reset (under 5 hours).</li>
-          <li>If two rules match, use the smaller band. Nothing left means wait for a reset before a new project.</li>
-          <li>Session resets every few hours, so its countdown does not change the band. If you’re limited by Session and it resets soon, a note says to calculate again after it resets.</li>
-          <li>Small is about 15–30 minutes. Medium is about an hour. Large is about 2–3 hours, sometimes across more than one sitting.</li>
-          <li>The band uses the percentages only, not which plan you pay for. The same 50% left can do more on a higher plan; that gap isn’t published.</li>
-        </ol>
+      <details class="overflow" id="overflow">
+        <summary>More</summary>
+
+        <p class="overflow-actions"><button type="button" class="secondary" id="example-btn">Try sample</button></p>
+
+        <details class="how-copy">
+          <summary>How to copy</summary>
+          <ol class="copy-path" aria-label="Open Usage">
+            <li>Claude</li>
+            <li>Settings</li>
+            <li>Usage</li>
+          </ol>
+
+          <ol class="num-key">
+            <li><strong>Session</strong> — % used or left this window</li>
+            <li><strong>Resets in</strong> — time until this window resets (skip if unused / blank)</li>
+            <li><strong>Weekly</strong> — % + weekday &amp; time it resets</li>
+          </ol>
+
+          <div class="usage-map">
+            <p class="hint">Example numbers, not a real screenshot. The fields below use the same numbers.</p>
+            <div class="map-grid">
+              <div class="map-block" data-slot="1" data-pct="72">
+                <p class="map-k"><span class="map-mark">①</span> <span class="mode-label" data-used="Session — % used" data-left="Session — % left">Session — % used</span></p>
+                <p class="map-v">72%</p>
+                <span class="demo-bar" aria-hidden="true"><i class="demo-fill-72"></i></span>
+              </div>
+              <div class="map-block" data-slot="2" data-hours="3" data-minutes="12">
+                <p class="map-k"><span class="map-mark">②</span> Resets in</p>
+                <p class="map-v">3 hr 12 min</p>
+              </div>
+              <div class="map-block" data-slot="3" data-pct="31" data-day="4" data-clock="08:00">
+                <p class="map-k"><span class="map-mark">③</span> <span class="mode-label" data-used="Weekly — % used" data-left="Weekly — % left">Weekly — % used</span></p>
+                <p class="map-v">31% · Thu 8:00</p>
+                <span class="demo-bar" aria-hidden="true"><i class="demo-fill-31"></i></span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <section id="quiz" aria-labelledby="quiz-title">
+          <details class="prefs">
+          <summary>Preferences (optional)</summary>
+          <h2 id="quiz-title"><span class="num">2</span>Preferences <small>(optional)</small></h2>
+          <p class="privacy">Answers stay in this tab until you close it.</p>
+          <p class="skip-row"><button type="button" id="skip-btn" class="secondary">Skip to recommendations</button></p>
+
+          <form id="quiz-form" novalidate>
+            <fieldset class="q">
+              <legend><span class="qn">Question 1</span> What do you want to use it for? (pick any)</legend>
+              <div class="chips" id="q-domains"></div>
+              <label class="field other">Something else:
+                <input type="text" id="q-other" maxlength="40" autocomplete="off" placeholder="e.g. pets, childcare">
+              </label>
+            </fieldset>
+
+            <fieldset class="q">
+              <legend><span class="qn">Question 2</span> One thing you want to do soon?</legend>
+              <label class="field">
+                <span class="hint">One sentence is enough. If you write it, we’ll add a project card for that.</span>
+                <input type="text" id="q-wish" maxlength="80" autocomplete="off" placeholder="e.g. Mom’s 60th birthday, learn three recipes">
+              </label>
+            </fieldset>
+
+            <fieldset class="q">
+              <legend><span class="qn">Question 3</span> What should you have when it’s done? (pick any)</legend>
+              <div class="chips" id="q-outputs"></div>
+            </fieldset>
+
+            <fieldset class="q">
+              <legend><span class="qn">Question 4</span> Who is this for? (pick any)</legend>
+              <div class="chips" id="q-audiences"></div>
+            </fieldset>
+
+            <div class="clear-row">
+              <button type="button" id="clear-btn" class="secondary">Clear my answers</button>
+              <p class="hint">Clears quiz answers, step 1 numbers, and finished projects.</p>
+              <p class="msg ok" id="clear-msg" role="status" hidden></p>
+            </div>
+          </form>
+          </details>
+        </section>
+
+        <details id="recs-more" class="smaller" hidden>
+          <summary>More projects</summary>
+          <div id="more-list" class="cards"></div>
+        </details>
+
+        <details class="rules">
+          <summary>How is the band chosen?</summary>
+          <ol>
+            <li>Session left and Weekly left: <strong>the smaller one</strong> is the effective left.</li>
+            <li><strong>Large</strong>: both over 50% (50% itself is not over), <strong>and</strong> more than 1 day until the weekly reset.</li>
+            <li><strong>Medium</strong>: one window is 20%–50% left. Both over 50% but the weekly reset is within 1 day is also Medium.</li>
+            <li><strong>Small</strong>: one window is under 20% left, <strong>or</strong> only a few hours until the weekly reset (under 5 hours).</li>
+            <li>If two rules match, use the smaller band. Nothing left means wait for a reset before a new project.</li>
+            <li>Session resets every few hours, so its countdown does not change the band. If you’re limited by Session and it resets soon, Get project again after it resets.</li>
+            <li>Small is about 15–30 minutes. Medium is about an hour. Large is about 2–3 hours, sometimes across more than one sitting.</li>
+            <li>The band uses the percentages only, not which plan you pay for. The same 50% left can do more on a higher plan; that gap isn’t published.</li>
+          </ol>
+        </details>
       </details>
     </section>
 
-    <section id="quiz" class="step" aria-labelledby="quiz-title">
-      <details class="prefs">
-      <summary>Preferences (optional)</summary>
-      <h2 id="quiz-title"><span class="num">2</span>Preferences <small>(optional)</small></h2>
-      <p class="privacy">Answers stay in this tab until you close it.</p>
-      <p class="skip-row"><button type="button" id="skip-btn" class="secondary">Skip to recommendations</button></p>
-
-      <form id="quiz-form" novalidate>
-        <fieldset class="q">
-          <legend><span class="qn">Question 1</span> What do you want to use it for? (pick any)</legend>
-          <div class="chips" id="q-domains"></div>
-          <label class="field other">Something else:
-            <input type="text" id="q-other" maxlength="40" autocomplete="off" placeholder="e.g. pets, childcare">
-          </label>
-        </fieldset>
-
-        <fieldset class="q">
-          <legend><span class="qn">Question 2</span> One thing you want to do soon?</legend>
-          <label class="field">
-            <span class="hint">One sentence is enough. If you write it, we’ll add a project card for that.</span>
-            <input type="text" id="q-wish" maxlength="80" autocomplete="off" placeholder="e.g. Mom’s 60th birthday, learn three recipes">
-          </label>
-        </fieldset>
-
-        <fieldset class="q">
-          <legend><span class="qn">Question 3</span> What should you have when it’s done? (pick any)</legend>
-          <div class="chips" id="q-outputs"></div>
-        </fieldset>
-
-        <fieldset class="q">
-          <legend><span class="qn">Question 4</span> Who is this for? (pick any)</legend>
-          <div class="chips" id="q-audiences"></div>
-        </fieldset>
-
-        <div class="clear-row">
-          <button type="button" id="clear-btn" class="secondary">Clear my answers</button>
-          <p class="hint">Clears quiz answers, step 1 numbers, and finished projects.</p>
-          <p class="msg ok" id="clear-msg" role="status" hidden></p>
-        </div>
-      </form>
-      </details>
-    </section>
-
-    <section id="recs" class="step" aria-labelledby="recs-title">
-      <h2 id="recs-title" tabindex="-1"><span class="num">3</span>Pick a project</h2>
+    <section id="recs" class="hero-slot" aria-labelledby="recs-title" hidden>
+      <h2 id="recs-title" class="visually-hidden" tabindex="-1"><span class="num">3</span>Pick a project</h2>
 
       <div id="done-banner" class="done-banner" role="status" hidden>
-        <p id="done-line">Nice — re-copy the three numbers from Usage, then Calculate again.</p>
+        <p id="done-line">Nice — re-copy the three numbers from Usage, then Get project again.</p>
         <button type="button" id="recalc-btn" class="primary">Back to step 1</button>
       </div>
 
-      <div id="recs-status" class="recs-status" aria-live="polite"></div>
+      <div id="band-chips" class="band-chips" hidden></div>
       <div id="recs-list" class="cards"></div>
-
-      <details id="recs-more" class="smaller" hidden>
-        <summary>More projects</summary>
-        <div id="more-list" class="cards"></div>
-      </details>
+      <div id="recs-status" class="recs-status" aria-live="polite"></div>
     </section>
   </main>
 
