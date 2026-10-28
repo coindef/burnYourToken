@@ -142,7 +142,7 @@
     if (input.plan === 'api') {
       return {
         ok: false, notApplicable: true,
-        errors: [{ field: 'plan', msg: '按 API 用量付钱没有「窗口」，也就没有「剩余额度」这一说，这个工具不适用。' }]
+        errors: [{ field: 'plan', msg: '按 API 用量付钱没有「窗口」，用量页上没有这三个百分比，这个工具不适用。' }]
       };
     }
     const errors = [];
@@ -151,8 +151,17 @@
 
     const sPct = parsePct(input.sessionPct);
     const wPct = parsePct(input.weeklyPct);
-    if (!(sPct <= 100)) fail('sessionPct', '5 小时额度的百分比，要填 0 到 100 之间的数字。');
-    if (!(wPct <= 100)) fail('weeklyPct', '每周额度的百分比，要填 0 到 100 之间的数字。');
+    // 空着和填错分开说，并写明是用量页上的第几个数。
+    if (!(sPct <= 100)) {
+      fail('sessionPct', blank(input.sessionPct)
+        ? '① 还空着。把用量页上 5 小时额度（Session）的百分比抄过来，填 0 到 100。'
+        : '① 不是 0 到 100 的数字。看用量页上 5 小时额度（Session）的百分比，比如 72。');
+    }
+    if (!(wPct <= 100)) {
+      fail('weeklyPct', blank(input.weeklyPct)
+        ? '③ 还空着。把每周额度（Weekly）的百分比抄过来，填 0 到 100。'
+        : '③ 不是 0 到 100 的数字。看用量页上每周额度（Weekly）的百分比，比如 31。');
+    }
     const leftMode = input.mode === 'left';
     const sessionLeft = leftMode ? sPct : 100 - sPct;
     const weeklyLeft = leftMode ? wPct : 100 - wPct;
@@ -163,13 +172,13 @@
     if (input.sessionResetType === 'clock') {
       const c = parseClock(input.sessionClock);
       if (c) sessionHours = hoursUntilClock(c, now);
-      else if (!blank(input.sessionClock)) { sessionResetBad = true; fail('sessionClock', '重置时间的格式不对，比如 14:30。'); }
+      else if (!blank(input.sessionClock)) { sessionResetBad = true; fail('sessionClock', '② 的重置时间格式不对。用 24 小时制，比如 14:30。'); }
     } else if (!blank(input.sessionH) || !blank(input.sessionM)) {
       const h = blank(input.sessionH) ? 0 : parseAmount(input.sessionH);
       const m = blank(input.sessionM) ? 0 : parseAmount(input.sessionM);
       if (isNaN(h) || isNaN(m) || m > 59) {
         sessionResetBad = true;
-        fail('sessionCountdown', '还有几小时几分钟，要填数字，分钟不超过 59。');
+        fail('sessionCountdown', '② 的小时和分钟要填数字，分钟不超过 59。');
       } else {
         sessionHours = h + m / 60;
       }
@@ -180,18 +189,22 @@
         notes.push('5 小时额度还没开始用，按整整 5 小时算。');
       } else {
         fail(input.sessionResetType === 'clock' ? 'sessionClock' : 'sessionCountdown',
-          '填一下 5 小时额度还有多久重置（用量页上有写）。');
+          '② 还空着。把用量页上「还有多久重置」（Resets in）抄过来。5 小时额度是 0%、页面没写时间时可以不填。');
       }
     }
     if (sessionHours !== null && sessionHours > RULES.sessionHours) {
-      notes.push('5 小时额度一般 5 小时内就会重置，你填的离现在超过了 5 小时，确认一下有没有抄错（比如上午、下午弄反了）。');
+      notes.push('5 小时额度一般 5 小时内就会重置，你填的离现在超过了 5 小时。对照用量页上的重置时间，看有没有抄错（比如上午、下午弄反了）。');
     }
 
     // 每周额度：周几、几点重置
     const day = blank(input.weeklyDay) ? NaN : Number(input.weeklyDay);
     const weeklyClock = parseClock(input.weeklyClock);
-    if (!(day >= 0 && day <= 6)) fail('weeklyDay', '选一下每周额度是周几重置。');
-    if (!blank(input.weeklyClock) && !weeklyClock) fail('weeklyClock', '每周额度的重置时间格式不对，比如 08:00。');
+    if (!(day >= 0 && day <= 6)) {
+      fail('weeklyDay', blank(input.weeklyDay)
+        ? '③ 的周几还没选。看每周额度（Weekly）是周几重置。'
+        : '③ 的周几不对。选周一到周日里的一天。');
+    }
+    if (!blank(input.weeklyClock) && !weeklyClock) fail('weeklyClock', '③ 的几点格式不对。用 24 小时制，比如 08:00。不确定可以先留空。');
 
     if (errors.length) return { ok: false, errors: errors };
 

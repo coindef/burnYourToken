@@ -172,6 +172,20 @@
     ok(fields(r).indexOf('sessionCountdown') !== -1, '指向倒计时输入框');
   });
 
+  test('空着和填错分开说，并写明是第几个数', () => {
+    const blank = calc({ sessionPct: '', weeklyPct: '', sessionH: '', sessionM: '', weeklyDay: '' });
+    const msgs = blank.errors.map(e => e.msg).join('\n');
+    ok(msgs.indexOf('①') !== -1 && msgs.indexOf('还空着') !== -1, msgs);
+    ok(msgs.indexOf('③') !== -1 && msgs.indexOf('周几还没选') !== -1, msgs);
+    ok(msgs.indexOf('不是 0 到 100') === -1, '空着不当成填错：' + msgs);
+    const bad = calc({ sessionPct: '150', weeklyPct: 'nope' });
+    const badMsgs = bad.errors.map(e => e.msg).join('\n');
+    ok(badMsgs.indexOf('①') !== -1 && badMsgs.indexOf('③') !== -1 && badMsgs.indexOf('不是 0 到 100') !== -1, badMsgs);
+    ok(badMsgs.indexOf('还空着') === -1, badMsgs);
+    const noReset = calc({ sessionPct: '40', sessionH: '', sessionM: '' });
+    ok(noReset.errors.some(e => e.field === 'sessionCountdown' && e.msg.indexOf('②') !== -1 && e.msg.indexOf('还空着') !== -1), noReset.errors.map(e => e.msg).join(' / '));
+  });
+
   test('百分比不合法会报错；带 % 号和小数可以', () => {
     ok(fields(calc({ sessionPct: '120' })).indexOf('sessionPct') !== -1, '120');
     ok(fields(calc({ sessionPct: 'abc' })).indexOf('sessionPct') !== -1, 'abc');
