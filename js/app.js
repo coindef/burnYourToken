@@ -352,27 +352,18 @@
 
   // ---------------- 第 3 步：推荐卡片 ----------------
 
-  // 一张项目卡：为什么推它（档位 + 对上了哪些偏好）、目标产出、大概步骤、验收标准
-  function card(p, top) {
-    const info = core.BAND_INFO[p.band];
+  // 一张项目卡：标题、一行为什么、收起的步骤、Mark done。
+  function whyLine(p) {
     const why = p.why || { band: '', matches: [], summary: '' };
-    const pref = why.matches.length ? why.matches.join(' ') : why.summary;
-    const bullets = [];
-    if (why.band) bullets.push(el('li', { class: 'why-band', text: why.band }));
-    if (pref) bullets.push(el('li', { class: 'why-pref', text: pref }));
-    return el('article', { class: 'card band-' + p.band, 'data-id': p.id, 'data-band': p.band, 'data-top': top ? '1' : null }, [
-      el('div', { class: 'card-top' }, [
-        el('span', null, [
-          el('span', { class: 'badge', text: info.label }),
-          top ? el('span', { class: 'top-tag', text: 'Best match' }) : null
-        ]),
-        el('span', { class: 'time', text: info.time })
-      ]),
+    if (why.matches && why.matches.length) return why.matches.join(' ');
+    if (why.summary) return why.summary;
+    return why.band || '';
+  }
+
+  function card(p) {
+    return el('article', { class: 'card band-' + p.band, 'data-id': p.id, 'data-band': p.band }, [
       el('h3', { text: p.title }),
-      el('p', { class: 'domain', text: p.custom ? 'From what you wrote' : core.domainLabel(p.domain) }),
-      el('p', { class: 'k', text: 'Why' }),
-      el('ul', { class: 'why' }, bullets.slice(0, 2)),
-      el('p', { class: 'done-when' }, [el('span', { class: 'k', text: 'Done when:' }), ' ' + (p.done || '')]),
+      el('p', { class: 'why-line', text: whyLine(p) }),
       el('details', { class: 'steps' }, [
         el('summary', { text: 'Show steps' }),
         el('ol', null, (p.steps || []).map(t => el('li', { text: t })))
@@ -387,14 +378,12 @@
 
   function renderRecs() {
     const list = $('recs-list');
-    const smallerBox = $('recs-smaller');
-    const othersBox = $('recs-others');
+    const moreBox = $('recs-more');
+    const moreList = $('more-list');
     $('recs-status').textContent = '';
     list.textContent = '';
-    $('smaller-list').textContent = '';
-    $('others-list').textContent = '';
-    smallerBox.hidden = true;
-    othersBox.hidden = true;
+    moreList.textContent = '';
+    moreBox.hidden = true;
     $('done-banner').hidden = !state.stale;
 
     const quiz = readQuiz();
@@ -460,18 +449,13 @@
     } else if (rec.fallback) {
       status('Nothing in this band matches what you picked, so here is the whole band.', 'warn');
     }
-    const top = rec.personalized && !rec.fallback;
-    rec.cards.forEach((p, i) => list.appendChild(card(p, top && i === 0)));
-
-    if (rec.others.length) {
-      othersBox.hidden = false;
-      $('others-count').textContent = String(rec.others.length);
-      rec.others.forEach(p => $('others-list').appendChild(card(p)));
-    }
-    if (rec.smaller.length) {
-      smallerBox.hidden = false;
-      $('smaller-count').textContent = String(rec.smaller.length);
-      rec.smaller.forEach(p => $('smaller-list').appendChild(card(p)));
+    // 主列表只放这一档排第一的一张。其余同档和更小的档收进 More projects。
+    const primary = rec.cards[0] || null;
+    const extra = rec.cards.slice(primary ? 1 : 0).concat(rec.others, rec.smaller);
+    if (primary) list.appendChild(card(primary));
+    if (extra.length) {
+      moreBox.hidden = false;
+      extra.forEach(p => moreList.appendChild(card(p)));
     }
   }
 

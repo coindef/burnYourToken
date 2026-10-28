@@ -146,8 +146,8 @@
   }
   const resultOf = p => D.querySelector('#calc-results .result[data-service="' + p + '"]');
   const cards = () => Array.from(D.querySelectorAll('#recs-list .card'));
-  const smallerCards = () => Array.from(D.querySelectorAll('#smaller-list .card'));
-  const othersCards = () => Array.from(D.querySelectorAll('#others-list .card'));
+  const moreCards = () => Array.from(D.querySelectorAll('#more-list .card'));
+  const whyOf = card => text(card.querySelector('.why-line'));
   const bandCount = band => W.QP.PROJECTS.filter(p => p.band === band).length;
   const statusText = () => text($('recs-status'));
 
@@ -171,17 +171,25 @@
     const results = text($('calc-results'));
     ok(results.indexOf('Nothing calculated yet.') !== -1, results);
     ok(results.indexOf('Paste Session / Resets in / Weekly from Usage, or try the sample.') !== -1, results);
-    const map = D.querySelector('details.usage-map');
-    ok(map && !map.open, '用量图默认收起');
-    eq(map.querySelector('summary').textContent.trim(), 'Show usage page map');
+    const how = D.querySelector('details.how-copy');
+    ok(how && !how.open, 'How to copy starts closed');
+    eq(how.querySelector('summary').textContent.trim(), 'How to copy');
+    ok(how.querySelector('.copy-path') && how.querySelector('.num-key') && how.querySelector('.usage-map'), 'copy path, key, and map are one fold');
+    const prefs = D.querySelector('#quiz details.prefs');
+    ok(prefs && !prefs.open, 'preferences start closed');
+    eq(prefs.querySelector('summary').textContent.trim(), 'Preferences (optional)');
+    eq(text(D.querySelector('.lead')).trim(), 'Fill from Usage, then Mark done.');
+    ok(!D.querySelector('.jump') && !D.querySelector('.loop-line'), 'no jump nav or loop line');
     eq(text(D.querySelector('h1')).trim(), 'Leftover Claude quota?');
     const honesty = 'Runs only in this tab. Only reads Usage after you click Fill. Nothing burns until you Mark done.';
     eq(text(D.querySelector('footer')).replace(/\s+/g, ' ').trim(), honesty, 'footer');
     eq(D.body.textContent.split('Nothing burns until you Mark done.').length - 1, 1, 'honesty once');
     ok(D.body.textContent.indexOf('Doesn\u2019t read Claude Usage') === -1, 'old honesty gone');
     eq($('fill-usage-btn').textContent.trim(), 'Fill from Claude Usage');
-    eq($('fill-usage-btn').nextElementSibling.id, 'example-btn', 'fill is left of Try sample');
-    ok($('fill-usage-btn').classList.contains('secondary') && $('calc-btn').classList.contains('primary'), 'fill is secondary');
+    eq($('fill-usage-btn').nextElementSibling.id, 'calc-btn', 'Calculate follows Fill');
+    eq($('calc-btn').nextElementSibling.id, 'example-btn', 'Try sample sits beside Calculate');
+    ok($('fill-usage-btn').classList.contains('primary'), 'Fill is primary');
+    ok($('calc-btn').classList.contains('secondary') && $('example-btn').classList.contains('secondary'), 'Calculate and Try sample stay secondary');
     eq($('fill-status').hidden, true, 'idle has no helper');
     eq($('fill-status').textContent, '', 'idle copy empty');
     eq($('claude-s-pct').value, '', 'does not fill on load');
@@ -227,7 +235,7 @@
     ok(!$('claude-body').hidden, '格子又打开');
     eq($('claude-s-pct').value, '72', '① 还是示例');
 
-    D.querySelector('details.usage-map').open = true;
+    D.querySelector('details.how-copy').open = true;
     await wait(50);
     async function aligned(width) {
       frame.style.width = width + 'px';
@@ -427,10 +435,11 @@
     ok(text(r).indexOf('Limited by Session') !== -1, '写明瓶颈');
     ok(text(r).indexOf('effective left 15%') !== -1, '有效剩余 15%');
     ok(text(r).indexOf('One window is under 20% left') !== -1, '写明是哪条规则');
-    ok(cards().length > 0, '有推荐');
-    cards().forEach(c => eq(c.dataset.band, 'small', '卡片档位'));
-    eq(smallerCards().length, 0, '小档下面没有更小的');
-    ok($('recs-smaller').hidden, '「小一点的」不显示');
+    eq(cards().length, 1, '主列表一张');
+    eq(cards()[0].dataset.band, 'small', '卡片档位');
+    ok(moreCards().length > 0 && moreCards().every(c => c.dataset.band === 'small'), '其余同档在 More projects');
+    eq(cards().length + moreCards().length, bandCount('small'), '小档一张不落');
+    eq($('recs-more').querySelector('summary').textContent.trim(), 'More projects');
   });
 
   test('计算器：5 小时已用 80%（剩 20%）→ 中档（20% 算中），推荐全是中档', async () => {
@@ -441,8 +450,10 @@
     eq(r.dataset.band, 'medium', '档位');
     ok(text(r).indexOf('effective left 20%') !== -1, '有效剩余 20%');
     ok(text(r).indexOf('One window is only 20%–50% left') !== -1, '写明是哪条规则');
-    ok(cards().length > 0 && cards().every(c => c.dataset.band === 'medium'), '主推荐全是中档');
-    ok(smallerCards().every(c => c.dataset.band === 'small'), '折叠里只有小档');
+    eq(cards().length, 1, '主列表一张');
+    eq(cards()[0].dataset.band, 'medium', '主推荐是中档');
+    ok(moreCards().some(c => c.dataset.band === 'medium'), '其余中档在折叠里');
+    ok(moreCards().some(c => c.dataset.band === 'small') && moreCards().every(c => c.dataset.band === 'medium' || c.dataset.band === 'small'), '更小的档并进同一个折叠');
   });
 
   test('计算器：两个窗口都剩一半以上、离每周重置超过 1 天 → 大档；推荐是大档，更小的放在折叠里', async () => {
@@ -451,9 +462,11 @@
     calc();
     eq(resultOf('claude').dataset.band, 'large', '档位');
     ok(text(resultOf('claude')).indexOf('more than 1 day away') !== -1, '写明是哪条规则');
-    ok(cards().length > 0 && cards().every(c => c.dataset.band === 'large'), '主推荐全是大档');
-    ok(!$('recs-smaller').hidden, '有「小一点的」');
-    ok(smallerCards().every(c => c.dataset.band === 'small' || c.dataset.band === 'medium'), '折叠里只有更小的');
+    eq(cards().length, 1, '主列表一张');
+    eq(cards()[0].dataset.band, 'large', '主推荐是大档');
+    ok(!$('recs-more').hidden, '有 More projects');
+    ok(moreCards().some(c => c.dataset.band === 'large'), '其余大档在折叠里');
+    ok(moreCards().some(c => c.dataset.band === 'small' || c.dataset.band === 'medium'), '更小的档在同一个折叠');
   });
 
   test('计算器：离每周额度重置只剩 20 分钟 → 只能小档，并写明是时间不够', async () => {
@@ -514,9 +527,10 @@
     calc();
     pick('input[name="q-domain"][value="life"]');
     pick('input[name="q-domain"][value="create"]');
-    const ids = cards().map(c => c.dataset.id).sort().join(',');
-    eq(ids, 'create-memory-book,life-budget', '大档的生活 + 创作');
-    smallerCards().forEach(c => ok(c.dataset.band !== 'large', '折叠里没有大档'));
+    eq(cards().length, 1, '主列表一张');
+    eq(cards()[0].dataset.id, 'life-budget', '生活和创作里排第一的');
+    ok(moreCards().some(c => c.dataset.id === 'create-memory-book'), '另一张同档在 More projects');
+    ok(cards().concat(moreCards()).every(c => c.dataset.band === 'large' || c.dataset.band === 'medium' || c.dataset.band === 'small'), '没有超出大档');
   });
 
   test('问题 2 写想做的事 → 多一张按这件事做的卡；原话照原样显示，不会被当成网页代码执行', async () => {
@@ -526,7 +540,7 @@
     const wish = '<img src=x onerror="window.__xss=1">给妈妈过生日';
     setVal('q-wish', wish);
     await wait(50);
-    const mine = cards().find(c => c.dataset.id.indexOf('custom:') === 0);
+    const mine = cards().concat(moreCards()).find(c => c.dataset.id.indexOf('custom:') === 0);
     ok(mine, '有自定义卡');
     eq(mine.dataset.band, 'medium', '自定义卡的档位');
     ok(text(mine).indexOf(wish) !== -1, '原话照原样显示');
@@ -543,26 +557,20 @@
     pick('input[name="q-domain"][value="travel"]');
     pick('input[name="q-output"][value="plan"]');
     pick('input[name="q-audience"][value="family"]');
+    eq(cards().length, 1, '主列表只有一张');
     const first = cards()[0];
     eq(first.dataset.id, 'travel-trip', '第一张');
-    eq(first.dataset.top, '1', '标着最贴合');
-    ok(text(first).indexOf('Best match') !== -1, '看得见 Best match');
-    eq(D.querySelectorAll('#recs-list [data-top]').length, 1, '只有一张最贴合');
-    eq(first.querySelectorAll('.why li').length, 2, 'Why 最多两条');
-    const why = text(first.querySelector('.why-pref'));
+    ok(!first.querySelector('.badge') && !first.querySelector('.top-tag'), '没有档位和 Best match 芯片');
+    const why = whyOf(first);
     ok(/Travel/.test(why) && /A plan/.test(why) && /Family, friends, or kids/.test(why), why);
-    ok(text(first.querySelector('.why-band')).indexOf('Fits your Large') !== -1, '档位理由');
-    cards().forEach(c => {
-      eq(c.dataset.band, 'large', c.dataset.id + ' 主推荐档位');
-      ok(c.querySelectorAll('.why li').length <= 2 && text(c.querySelector('.why-pref')).length > 0, c.dataset.id + ' 写着对上了什么');
+    eq(first.querySelector('.done-btn').textContent.trim(), 'Mark done');
+    ok(!$('recs-more').hidden, '其余项目在 More projects');
+    eq($('recs-more').querySelector('summary').textContent.trim(), 'More projects');
+    moreCards().forEach(c => {
+      if (whyOf(c).indexOf("preferences don't") !== -1) eq(c.dataset.band, 'large', c.dataset.id + ' 没对上的仍是同档');
     });
-    ok(!$('recs-others').hidden, '有「同一档的其他项目」');
-    othersCards().forEach(c => {
-      eq(c.dataset.band, 'large', c.dataset.id + ' 其他也是同档');
-      ok(text(c.querySelector('.why-pref')).indexOf("preferences don't") !== -1, c.dataset.id + ' 写着没对上');
-    });
-    eq(cards().length + othersCards().length, bandCount('large'), '同一档一个不少');
-    smallerCards().forEach(c => ok(c.dataset.band !== 'large', c.dataset.id + ' 折叠里没有大档'));
+    eq(cards().concat(moreCards()).filter(c => c.dataset.band === 'large').length, bandCount('large'), '同一档一个不少');
+    ok(moreCards().some(c => c.dataset.band !== 'large'), '更小的档在同一个折叠');
     ok(statusText().indexOf('Outcome: A plan') !== -1 && statusText().indexOf('For: Family, friends, or kids') !== -1, '状态里写了按什么排的');
   });
 
@@ -571,16 +579,17 @@
     fill('claude', { s: 60, w: 20 }); // 有效剩余 40% → 中档
     calc();
     pick('input[name="q-output"][value="list"]');
-    const listIds = cards().map(c => c.dataset.id);
-    eq(listIds[0], 'work-checklist', '表 / 清单：第一张');
-    ok(listIds.every(id => W.QP.PROJECTS.find(p => p.id === id).outputs.indexOf('list') !== -1), '主推荐都是表或清单：' + listIds.join());
+    eq(cards().length, 1, '主列表一张');
+    eq(cards()[0].dataset.id, 'work-checklist', '表 / 清单：第一张');
+    ok(W.QP.PROJECTS.find(p => p.id === cards()[0].dataset.id).outputs.indexOf('list') !== -1, '主推荐是表或清单');
     unpick('input[name="q-output"][value="list"]');
     pick('input[name="q-output"][value="learn"]');
-    const learnIds = cards().map(c => c.dataset.id);
-    eq(learnIds[0], 'work-interview', '弄懂 / 练熟：第一张');
-    ok(listIds.join() !== learnIds.join(), '排序跟着变了');
-    cards().concat(othersCards()).forEach(c => eq(c.dataset.band, 'medium', c.dataset.id + ' 档位'));
-    smallerCards().forEach(c => eq(c.dataset.band, 'small', c.dataset.id + ' 折叠里只有小档'));
+    eq(cards().length, 1, '换成练熟后仍是一张');
+    eq(cards()[0].dataset.id, 'work-interview', '弄懂 / 练熟：第一张');
+    ok(cards()[0].dataset.id !== 'work-checklist', '排序跟着变了');
+    cards().concat(moreCards()).filter(c => c.dataset.band === 'medium').forEach(c => eq(c.dataset.band, 'medium', c.dataset.id + ' 档位'));
+    ok(moreCards().some(c => c.dataset.band === 'small'), '更小的档在 More projects');
+    moreCards().filter(c => c.dataset.band === 'small').forEach(c => eq(c.dataset.band, 'small', c.dataset.id));
   });
 
   test('偏好 × 小档：选「工作上要用」→ 第一张是写工作消息，标「最贴合你」；其余小档在折叠里', async () => {
@@ -588,12 +597,12 @@
     fill('claude', { s: 85, w: 30 });
     calc();
     pick('input[name="q-audience"][value="work"]');
+    eq(cards().length, 1, '主列表一张');
     eq(cards()[0].dataset.id, 'work-message', '第一张');
-    eq(cards()[0].dataset.top, '1', '最贴合');
-    ok(text(cards()[0].querySelector('.why-pref')).indexOf('For work') !== -1, '写着对上了 For work');
-    cards().concat(othersCards()).forEach(c => eq(c.dataset.band, 'small', c.dataset.id + ' 档位'));
-    eq(cards().length + othersCards().length, bandCount('small'), '同一档一个不少');
-    eq(smallerCards().length, 0, '小档下面没有更小的');
+    ok(whyOf(cards()[0]).indexOf('For work') !== -1, '写着对上了 For work');
+    cards().concat(moreCards()).forEach(c => eq(c.dataset.band, 'small', c.dataset.id + ' 档位'));
+    eq(cards().length + moreCards().length, bandCount('small'), '同一档一个不少');
+    ok(moreCards().every(c => c.dataset.band === 'small'), '小档下面没有更小的');
   });
 
   test('跳过偏好：点「跳过，直接看推荐」→ 到第 3 步；大、中、小三档都只按档位出推荐，每张卡写着是按档位挑的', async () => {
@@ -606,14 +615,14 @@
       setVal('claude-s-pct', String(c[0]));
       calc();
       eq(resultOf('claude').dataset.band, c[1], '档位');
-      eq(cards().length, bandCount(c[1]), c[1] + '：这一档全列出来');
+      eq(cards().length, 1, c[1] + '：主列表一张');
       cards().forEach(n => {
         eq(n.dataset.band, c[1], n.dataset.id + ' 档位');
-        ok(text(n.querySelector('.why-pref')).indexOf('by band') !== -1, n.dataset.id + ' 写着按档位挑');
-        ok(text(n.querySelector('.why-band')).indexOf('Fits your') !== -1, n.dataset.id + ' 写着档位');
+        ok(whyOf(n).indexOf('by band') !== -1, n.dataset.id + ' 写着按档位挑');
+        ok(!n.querySelector('.top-tag') && !n.querySelector('.badge'), n.dataset.id + ' 没有芯片');
       });
-      eq(D.querySelectorAll('#recs-list [data-top]').length, 0, '没填偏好就不标「最贴合」');
-      ok($('recs-others').hidden, '没有「同一档的其他」');
+      eq(cards().concat(moreCards()).filter(n => n.dataset.band === c[1]).length, bandCount(c[1]), c[1] + '：其余同档在 More projects');
+      ok(!$('recs-more').hidden, 'More projects 收着其余的');
       ok(statusText().indexOf('skipped') !== -1, '状态里说了是跳过的');
       eq($('skip-btn').textContent.trim(), 'Skip to recommendations');
     });
@@ -659,11 +668,12 @@
     pick('input[name="q-audience"][value="work"]');
     const total = bandCount('small');
     for (let i = 0; i < total; i++) {
-      eq(cards().length + othersCards().length, total - i, '第 ' + (i + 1) + ' 轮还剩几张（主推荐 + 同一档的其他）');
-      if (i === 0) eq(cards().length, 1, '一开始只有「工作上要用」对上的那张在主推荐');
+      eq(cards().length + moreCards().length, total - i, '第 ' + (i + 1) + ' 轮还剩几张（主推荐 + More projects）');
+      eq(cards().length, 1, '主列表始终一张');
+      if (i === 0) eq(cards()[0].dataset.id, 'work-message', '一开始是对上「工作上要用」的那张');
       if (i === 1) {
         ok(statusText().indexOf('Nothing in this band matches') !== -1, '对上的做完了 → 说明是退回列出这一档的');
-        eq(cards().length, total - 1, '其余的都列进主推荐');
+        eq(moreCards().length, total - i - 1, '其余的在 More projects');
       }
       cards()[0].querySelector('.done-btn').click();
       calc();
@@ -776,13 +786,14 @@
     await fresh();
     fill('claude', { s: 0, w: 0 }); // 大档、不填问卷 → 主推荐 7 个大档 + 折叠里 18 个更小的
     calc();
-    const all = cards().concat(smallerCards());
+    const all = cards().concat(moreCards());
+    eq(cards().length, 1, '主列表一张');
     eq(new Set(all.map(c => c.dataset.id)).size, W.QP.PROJECTS.length, '项目数');
     all.forEach(c => {
       ok(!c.querySelector('dl'), c.dataset.id + ' 不是一堵定义列表');
-      ok(c.querySelectorAll('.why li').length >= 1 && c.querySelectorAll('.why li').length <= 2, c.dataset.id + ' Why 条数');
-      ok(text(c.querySelector('.why-band')).length > 0, c.dataset.id + ' 档位理由');
-      ok(text(c.querySelector('.done-when')).indexOf('Done when:') === 0, c.dataset.id + ' Done when');
+      ok(!c.querySelector('.badge') && !c.querySelector('.top-tag') && !c.querySelector('.done-when'), c.dataset.id + ' 没有芯片');
+      ok(whyOf(c).length > 0, c.dataset.id + ' 一行为什么');
+      eq(c.querySelectorAll('.why li').length, 0, c.dataset.id + ' 没有分条 Why');
       const steps = c.querySelector('details.steps');
       ok(steps && !steps.open, c.dataset.id + ' 步骤默认收起');
       eq(steps.querySelector('summary').textContent.trim(), 'Show steps', c.dataset.id);
@@ -884,8 +895,9 @@
     pick('input[name="q-output"][value="text"]');
     pick('input[name="q-audience"][value="family"]');
     setVal('q-wish', '给妈妈过 60 岁生日，想做一本相册');
-    $('recs-others').open = true;
-    $('recs-smaller').open = true;
+    $('recs-more').open = true;
+    D.querySelector('details.how-copy').open = true;
+    D.querySelector('#quiz details.prefs').open = true;
     await wait(50);
   }
 

@@ -62,43 +62,15 @@ h1, h2, h3 { line-height: 1.35; text-wrap: balance; }
   font-size: 13px;
 }
 .top h1 { margin: 0 0 6px; font-size: 26px; }
-.lead { margin: 0 0 16px; color: var(--muted); font-size: 17px; }
-.jump {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.jump a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg);
-  text-decoration: none;
-  color: var(--text);
-  font-size: 15px;
-}
-.jump b {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 13px;
-}
-.loop-line { margin: 0; color: var(--muted); font-size: 14px; }
+.lead { margin: 0; color: var(--muted); font-size: 17px; }
+.how-copy { margin: 0 0 12px; }
+.how-copy > summary,
+.prefs > summary { cursor: pointer; font-weight: 600; color: var(--accent-dark); }
+.prefs > summary { font-size: 22px; color: var(--text); }
 .num-key { margin: 10px 0 4px; padding-left: 1.25em; }
 .num-key li { margin: 4px 0; }
-details.usage-map { margin-top: 12px; }
-details.usage-map summary { cursor: pointer; font-weight: 600; color: var(--accent-dark); }
-details.usage-map .map-grid { margin-top: 8px; }
+.how-copy .usage-map { margin-top: 12px; }
+.how-copy .map-grid { margin-top: 8px; }
 .empty-title { margin: 8px 0 0; font-weight: 700; }
 .empty-hint { margin: 4px 0 0; color: var(--muted); }
 
@@ -284,11 +256,12 @@ button {
 .secondary:hover { background: var(--bg); }
 .calc-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .calc-actions button { flex: 1 1 160px; }
+.calc-actions .primary { font-size: 18px; }
 .fill-status { flex: 1 0 100%; margin: 0; font-size: 14px; }
 .fill-status.working { color: var(--muted); }
 .fill-status.ok { color: var(--ok); }
 .fill-status.warn { color: var(--warn); }
-#calc-btn { margin: 0; width: auto; font-size: 18px; }
+#calc-btn { margin: 0; width: auto; }
 
 /* ---------- 计算结果 ---------- */
 .results { margin-top: 14px; }
@@ -388,35 +361,16 @@ button {
 .card.band-small { border-top: 5px solid var(--small); }
 .card.band-medium { border-top: 5px solid var(--medium); }
 .card.band-large { border-top: 5px solid var(--large); }
-.card-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
-.card .time { font-size: 14px; color: var(--muted); }
-.card .k { font-weight: 700; font-size: 14px; color: var(--accent-dark); }
-.card .why { margin: 4px 0 8px; }
-.card .done-when { margin: 0 0 12px; }
-.card .done-when .k { margin-right: 4px; }
+.card .why-line { margin: 0 0 12px; }
 .card .steps { margin: 0 0 12px; }
 .card .steps summary { cursor: pointer; font-weight: 600; color: var(--accent-dark); }
-.card .domain { font-size: 14px; color: var(--muted); }
-.card h3 { margin: 8px 0 6px; font-size: 18px; }
+.card h3 { margin: 0 0 6px; font-size: 18px; }
 .card dl { margin: 0 0 12px; flex: 1; }
 .card dt { margin-top: 10px; font-weight: 700; font-size: 14px; color: var(--accent-dark); }
 .card dd { margin: 2px 0 0; }
 .card ol, .card ul { margin: 2px 0 0; padding-left: 20px; }
 .card li { margin: 3px 0; }
-.card[data-top] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.top-tag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-}
-.why-band { display: block; color: var(--muted); font-size: 14px; }
-.why-pref ul { color: var(--accent-dark); }
-.why-none { color: var(--muted); font-size: 14px; }
+.why-line { color: var(--text); }
 #recs-title:focus { outline: none; }
 .done-btn { background: var(--accent); border: 1px solid var(--accent); color: #fff; font-weight: 600; width: 100%; }
 .done-btn:hover { background: var(--accent-dark); }

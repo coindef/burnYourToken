@@ -13,49 +13,28 @@
   <header class="top">
     <div class="wrap">
       <h1>Leftover Claude quota?</h1>
-      <p class="lead">Copy three numbers from Usage. We’ll suggest a project that fits what’s left.</p>
-      <ol class="jump">
-        <li><a href="#calc"><b>1</b> Copy numbers</a></li>
-        <li><a href="#quiz"><b>2</b> Preferences (optional)</a></li>
-        <li><a href="#recs"><b>3</b> Pick a project</a></li>
-      </ol>
-      <p class="loop-line">Finish one → re-copy the three numbers → next.</p>
+      <p class="lead">Fill from Usage, then Mark done.</p>
     </div>
   </header>
 
   <main class="wrap">
     <section id="calc" class="step" aria-labelledby="calc-title">
       <h2 id="calc-title"><span class="num">1</span>Copy numbers</h2>
-      <ol class="copy-path" aria-label="Open Usage">
-        <li>Claude</li>
-        <li>Settings</li>
-        <li>Usage</li>
-      </ol>
+      <details class="how-copy">
+        <summary>How to copy</summary>
+        <ol class="copy-path" aria-label="Open Usage">
+          <li>Claude</li>
+          <li>Settings</li>
+          <li>Usage</li>
+        </ol>
 
-      <ol class="num-key">
-        <li><strong>Session</strong> — % used or left this window</li>
-        <li><strong>Resets in</strong> — time until this window resets (skip if unused / blank)</li>
-        <li><strong>Weekly</strong> — % + weekday &amp; time it resets</li>
-      </ol>
+        <ol class="num-key">
+          <li><strong>Session</strong> — % used or left this window</li>
+          <li><strong>Resets in</strong> — time until this window resets (skip if unused / blank)</li>
+          <li><strong>Weekly</strong> — % + weekday &amp; time it resets</li>
+        </ol>
 
-      <p class="msg info" id="restore-note" hidden>Brought back what you typed in this tab. Reset times may have changed — check Usage, then Calculate.</p>
-
-      <form id="calc-form" novalidate>
-        <label class="field" for="claude-plan">Which plan?
-          <select id="claude-plan">
-            <option value="">Choose</option>
-            <option value="pro">Pro</option>
-            <option value="max5">Max (5×)</option>
-            <option value="max20">Max (20×)</option>
-            <option value="team">Team / Enterprise</option>
-            <option value="other">Other plan</option>
-            <option value="api">API billing</option>
-          </select>
-        </label>
-        <p class="msg warn" id="claude-api" hidden>API billing has no session/weekly window — this tool doesn’t apply.</p>
-
-        <details class="usage-map">
-          <summary>Show usage page map</summary>
+        <div class="usage-map">
           <p class="hint">Example numbers, not a real screenshot. The fields below use the same numbers.</p>
           <div class="map-grid">
             <div class="map-block" data-slot="1" data-pct="72">
@@ -73,7 +52,24 @@
               <span class="demo-bar" aria-hidden="true"><i class="demo-fill-31"></i></span>
             </div>
           </div>
-        </details>
+        </div>
+      </details>
+
+      <p class="msg info" id="restore-note" hidden>Brought back what you typed in this tab. Reset times may have changed — check Usage, then Calculate.</p>
+
+      <form id="calc-form" novalidate>
+        <label class="field" for="claude-plan">Which plan?
+          <select id="claude-plan">
+            <option value="">Choose</option>
+            <option value="pro">Pro</option>
+            <option value="max5">Max (5×)</option>
+            <option value="max20">Max (20×)</option>
+            <option value="team">Team / Enterprise</option>
+            <option value="other">Other plan</option>
+            <option value="api">API billing</option>
+          </select>
+        </label>
+        <p class="msg warn" id="claude-api" hidden>API billing has no session/weekly window — this tool doesn’t apply.</p>
 
         <fieldset class="service" id="svc-claude" aria-label="Claude usage">
           <div class="svc-body" id="claude-body">
@@ -81,9 +77,9 @@
           </div>
         </fieldset>
         <div class="calc-actions">
-          <button type="button" class="secondary" id="fill-usage-btn">Fill from Claude Usage</button>
+          <button type="button" class="primary" id="fill-usage-btn">Fill from Claude Usage</button>
+          <button type="submit" class="secondary" id="calc-btn">Calculate</button>
           <button type="button" class="secondary" id="example-btn">Try sample</button>
-          <button type="submit" class="primary" id="calc-btn">Calculate</button>
           <p id="fill-status" class="fill-status" role="status" hidden></p>
         </div>
       </form>
@@ -106,6 +102,8 @@
     </section>
 
     <section id="quiz" class="step" aria-labelledby="quiz-title">
+      <details class="prefs">
+      <summary>Preferences (optional)</summary>
       <h2 id="quiz-title"><span class="num">2</span>Preferences <small>(optional)</small></h2>
       <p class="privacy">Answers stay in this tab until you close it.</p>
       <p class="skip-row"><button type="button" id="skip-btn" class="secondary">Skip to recommendations</button></p>
@@ -143,6 +141,7 @@
           <p class="msg ok" id="clear-msg" role="status" hidden></p>
         </div>
       </form>
+      </details>
     </section>
 
     <section id="recs" class="step" aria-labelledby="recs-title">
@@ -156,14 +155,9 @@
       <div id="recs-status" class="recs-status" aria-live="polite"></div>
       <div id="recs-list" class="cards"></div>
 
-      <details id="recs-others" class="smaller" hidden>
-        <summary>Other projects in this band (<span id="others-count">0</span>)</summary>
-        <div id="others-list" class="cards"></div>
-      </details>
-
-      <details id="recs-smaller" class="smaller" hidden>
-        <summary>Smaller than what’s left (<span id="smaller-count">0</span>)</summary>
-        <div id="smaller-list" class="cards"></div>
+      <details id="recs-more" class="smaller" hidden>
+        <summary>More projects</summary>
+        <div id="more-list" class="cards"></div>
       </details>
     </section>
   </main>
