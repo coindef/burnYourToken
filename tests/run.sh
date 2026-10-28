@@ -1,15 +1,68 @@
 #!/bin/sh
 # 用无头 Chrome 跑全部测试，打印每一条结果和每一次运行的控制台消息数。只在本机运行，不联网（只访问 127.0.0.1）。
-# 用法：sh tests/run.sh            （需要本机装了 Google Chrome 和 python3）
+# 用法：sh tests/run.sh            （需要 python3，以及 Chrome 或 Chromium）
+#       CHROME=/完整路径 sh tests/run.sh
 #       sh tests/run.sh shot 375   （另外存一张 375px 宽的整页截图到 /tmp/qp-shot-375.png）
 # 控制台：单元测试、页面流程测试、直接打开 index.html（http 和 file://）都要求 0 条消息（任何级别）。
 #         只有「不联网探针」会故意发请求，被拦下时的提示是预期的，单独列出来。
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 PORT="${PORT:-8765}"
 PROFILE="$(mktemp -d /tmp/qp-chrome.XXXXXX)"
 FAILED=0
+
+# macOS 用应用程序路径。Linux 先找真正的浏览器二进制，再看 PATH。
+# 有的环境里 PATH 上的 google-chrome 是包了一层的脚本（固定用户目录、远程调试），
+# 无头跑测试会挂住。CHROME=/完整路径 可以盖过自动查找。
+find_chrome() {
+  if [ -n "${CHROME:-}" ]; then
+    if [ -x "$CHROME" ]; then
+      printf '%s\n' "$CHROME"
+      return 0
+    fi
+    echo "CHROME 指到的文件不能运行：$CHROME" >&2
+    return 1
+  fi
+  mac="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  if [ -x "$mac" ]; then
+    printf '%s\n' "$mac"
+    return 0
+  fi
+  for path in \
+    /usr/bin/google-chrome-stable \
+    /usr/bin/google-chrome \
+    /opt/google/chrome/chrome \
+    /usr/bin/chromium \
+    /usr/bin/chromium-browser
+  do
+    if [ -x "$path" ]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done
+  for name in google-chrome google-chrome-stable chromium chromium-browser; do
+    found=$(command -v "$name" 2>/dev/null || true)
+    if [ -n "$found" ] && [ -x "$found" ]; then
+      printf '%s\n' "$found"
+      return 0
+    fi
+  done
+  echo "找不到 Chrome / Chromium。安装一个，或：CHROME=/完整路径 sh tests/run.sh" >&2
+  return 1
+}
+
+CHROME_BIN=$(find_chrome) || exit 1
+# 容器和部分 Linux 上沙箱起不来。这里只打开本机测试页。
+SANDBOX_FLAGS=""
+if [ "$(uname -s)" != "Darwin" ]; then
+  SANDBOX_FLAGS="--no-sandbox --disable-dev-shm-usage"
+fi
+# 浏览器没自己退出时不要一直等。macOS 往往没有 timeout，没有就直接跑。
+TIMEOUT=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT="timeout 90"
+fi
+echo "用浏览器：$CHROME_BIN"
 
 python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$ROOT" >/dev/null 2>&1 &
 SERVER=$!
@@ -19,8 +72,11 @@ sleep 1
 # run 名字 地址 [其他参数]：DOM 存到 $PROFILE/名字.html，控制台存到 $PROFILE/名字.log
 run() {
   name="$1"; url="$2"; shift 2
-  "$CHROME" --headless=new --disable-gpu --no-first-run --no-default-browser-check \
+  # SANDBOX_FLAGS、TIMEOUT 在需要时才是参数，故意不打引号。
+  # shellcheck disable=SC2086
+  $TIMEOUT "$CHROME_BIN" --headless=new --disable-gpu --no-first-run --no-default-browser-check \
     --user-data-dir="$PROFILE/profile-$name" --virtual-time-budget=60000 --enable-logging=stderr --v=0 \
+    $SANDBOX_FLAGS \
     "$@" --dump-dom "$url" >"$PROFILE/$name.html" 2>"$PROFILE/$name.log"
 }
 
@@ -85,8 +141,10 @@ report probe tests expected
 
 if [ "${1:-}" = "shot" ]; then
   W="${2:-375}"
-  "$CHROME" --headless=new --disable-gpu --no-first-run --no-default-browser-check \
+  # shellcheck disable=SC2086
+  $TIMEOUT "$CHROME_BIN" --headless=new --disable-gpu --no-first-run --no-default-browser-check \
     --user-data-dir="$PROFILE/profile-shot" --virtual-time-budget=60000 \
+    $SANDBOX_FLAGS \
     --hide-scrollbars --window-size="$W,9000" --screenshot="/tmp/qp-shot-$W.png" \
     "http://127.0.0.1:$PORT/tests/e2e.html?shot=$W" >/dev/null 2>&1
   echo "== 截图：/tmp/qp-shot-$W.png =="

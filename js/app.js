@@ -72,7 +72,7 @@
     const days = [1, 2, 3, 4, 5, 6, 0].map(d => '<option value="' + d + '">' + core.WEEKDAYS[d] + '</option>').join('');
     return '' +
       '<div class="copy-slot" data-slot="1">' +
-      '  <h3><span class="map-mark" aria-hidden="true">①</span> <span class="mode-label" data-used="5 小时额度，已经用了百分之几" data-left="5 小时额度，还剩百分之几">5 小时额度，已经用了百分之几</span></h3>' +
+      '  <h3><span class="map-mark" aria-hidden="true">①</span> <span class="mode-label" data-used="5 小时额度，已经用了百分之几" data-left="5 小时额度，还剩百分之几">5 小时额度，已经用了百分之几</span> <span class="en">Session</span></h3>' +
       '  <fieldset class="inline">' +
       '    <legend class="visually-hidden">百分比是已经用了还是还剩</legend>' +
       '    <label><input type="radio" name="' + p + '-mode" value="used" checked> 已经用了百分之几</label>' +
@@ -84,7 +84,7 @@
       '  </label>' +
       '</div>' +
       '<div class="copy-slot" data-slot="2">' +
-      '  <h3><span class="map-mark" aria-hidden="true">②</span> 这段还要多久重置</h3>' +
+      '  <h3><span class="map-mark" aria-hidden="true">②</span> 这段还要多久重置 <span class="en">Resets in</span></h3>' +
       '  <fieldset class="reset">' +
       '    <legend class="visually-hidden">② 重置时间</legend>' +
       '    <div class="choice">' +
@@ -99,10 +99,10 @@
       '      <input type="time" id="' + p + '-s-clock" aria-label="② 几点几分重置"> 重置' +
       '    </div>' +
       '  </fieldset>' +
-      '  <p class="hint">还没开始用（0%、页面上没写重置时间）可以不填。</p>' +
+      '  <p class="hint">还没开始用（0%、页面上没写重置时间）可以不填。这一格对应用量页上的 Resets in。</p>' +
       '</div>' +
       '<div class="copy-slot" data-slot="3">' +
-      '  <h3><span class="map-mark" aria-hidden="true">③</span> <span class="mode-label" data-used="每周额度：已经用了百分之几，" data-left="每周额度：还剩百分之几，">每周额度：已经用了百分之几，</span><br>周几几点重置</h3>' +
+      '  <h3><span class="map-mark" aria-hidden="true">③</span> <span class="mode-label" data-used="每周额度：已经用了百分之几，" data-left="每周额度：还剩百分之几，">每周额度：已经用了百分之几，</span> <span class="en">Weekly</span><br>周几几点重置</h3>' +
       '  <label class="field">百分比' +
       '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="比如 31" aria-label="③ 每周额度已经用了百分之几" data-used-label="③ 每周额度已经用了百分之几" data-left-label="③ 每周额度还剩百分之几"> %</span>' +
       '  </label>' +
@@ -227,7 +227,7 @@
     const name = s.name + (planLabel(s, r.plan) ? '（' + planLabel(s, r.plan) + '）' : '');
     if (!r.ok) {
       return el('div', { class: 'result result-error', 'data-service': s.id }, [
-        el('p', { class: 'result-title', text: name + '：' + (r.notApplicable ? '不适用' : '还有几样没填好') }),
+        el('p', { class: 'result-title', text: name + '：' + (r.notApplicable ? '不适用' : '①②③ 还没抄齐') }),
         el('ul', null, r.errors.map(e => el('li', { text: e.msg })))
       ]);
     }
@@ -264,13 +264,24 @@
     ]);
   }
 
+  // 还没点过「算一下」：告诉第一次来的人三个数是什么、下一步点哪里。
+  function emptyCalcGuide() {
+    return el('div', { class: 'empty-guide', role: 'status' }, [
+      el('p', { class: 'empty-title', text: '还没算。现在不会出档位，也不会出现项目。' }),
+      el('p', { text: '把上面 ①②③ 从 Claude → Settings → Usage 抄进格子，或先点「填示例试试」，再点「算一下」。点推荐卡片之前不会自动开始，也不会去读用量页。' })
+    ]);
+  }
+
   function renderResults() {
     const box = $('calc-results');
     box.textContent = '';
-    if (!state.computedAt) return;
+    if (!state.computedAt) {
+      box.appendChild(emptyCalcGuide());
+      return;
+    }
     const ids = Object.keys(state.results);
     if (!ids.length) {
-      box.appendChild(el('p', { class: 'msg warn', text: '先在上面选一下你订的是哪一档，再点「算一下」。' }));
+      box.appendChild(el('p', { class: 'msg warn', text: '还没选档位。先选你订的 Claude 是哪一档，把 ①②③ 填上，再点「算一下」。' }));
       return;
     }
     if (state.stale) {
@@ -405,7 +416,7 @@
 
     const pick = pickService(quiz);
     if (!pick) {
-      status('先在第 1 步算一下剩余，这里才会出项目。');
+      status('还没有项目卡。先在第 1 步把 ①②③ 抄好并点「算一下」。卡片出来以后你自己点；不会自动开始，也不会自动消耗额度。', 'info empty-guide');
       return;
     }
     const svc = serviceOf(pick.id);
@@ -416,13 +427,13 @@
     }
     if (!r.ok) {
       status(r.notApplicable
-        ? svc.name + '：按 API 用量付钱的情况这里不适用，没法推荐。'
-        : svc.name + ' 的数字还没填好，先回第 1 步补上。', 'warn');
+        ? svc.name + ' 按 API 用量付钱，用量页上没有这三个百分比，这里不适用，没法推荐。'
+        : '①②③ 还有没填好的（红框那一格）。先回第 1 步改完，再点「算一下」，这里才会出项目卡。', 'warn');
       return;
     }
     if (r.band === 'none') {
-      status(svc.name + ' 的额度现在用完了，先别开新项目。等「' + core.WINDOW_NAME[r.waitFor.which] +
-        '」重置（' + core.formatUntil(r.waitFor.hours) + '）再回来算。', 'warn');
+      status(svc.name + ' 的额度现在用完了，这里没有项目卡。等「' + core.WINDOW_NAME[r.waitFor.which] +
+        '」重置（' + core.formatUntil(r.waitFor.hours) + '）再把三个数抄回来算。', 'warn');
       return;
     }
 

@@ -110,6 +110,11 @@
     ok($('svc-claude') && !$('svc-chatgpt'), '只有 Claude，没有 ChatGPT 卡');
     eq(D.querySelectorAll('input[name="q-domain"]').length, 7, '领域选项');
     ok(statusText().indexOf('先在第 1 步') !== -1, '提示先算');
+    const key = text(D.querySelector('.num-key'));
+    ok(key.indexOf('Session') !== -1 && key.indexOf('Resets in') !== -1 && key.indexOf('Weekly') !== -1, '三个数的中英名字：' + key);
+    ok(text($('calc-results')).indexOf('还没算') !== -1, '第 1 步空状态');
+    ok(text($('calc-results')).indexOf('不会自动开始') !== -1, '空状态写明不自动开始');
+    ok(statusText().indexOf('不会自动消耗额度') !== -1, '第 3 步空状态写明不自动消耗');
     eq(D.getElementById('clear-btn').textContent.trim(), '清除我的回答', '清除按钮');
     ok(D.querySelector('input[name="q-service"][value="chatgpt"]'), '问卷第 5 题还在');
   });
@@ -535,7 +540,22 @@
     eq($('claude-s-pct').getAttribute('aria-invalid'), 'true', '百分比标红');
     eq($('claude-w-day').getAttribute('aria-invalid'), 'true', '周几标红');
     ok(resultOf('claude').classList.contains('result-error'), '显示错误');
+    ok(text(resultOf('claude')).indexOf('①') !== -1, '指出是第 ① 个数');
     eq(cards().length, 0, '不推');
+  });
+
+  test('三个数都空着：说哪一格还空着，不把空着说成填错', async () => {
+    await fresh();
+    setVal('claude-plan', 'pro');
+    setVal('claude-s-h', '');
+    setVal('claude-s-m', '');
+    calc();
+    const t = text(resultOf('claude'));
+    ok(t.indexOf('①') !== -1 && t.indexOf('还空着') !== -1, '① 空着：' + t);
+    ok(t.indexOf('③') !== -1 && t.indexOf('周几') !== -1, '③ 的周几：' + t);
+    ok(t.indexOf('不是 0 到 100') === -1, '空着不当成填错的数字');
+    eq(cards().length, 0, '不推');
+    ok(statusText().indexOf('红框') !== -1, '第 3 步指向红框');
   });
 
   test('额度用完 → 不推项目，告诉你等多久', async () => {
@@ -601,7 +621,8 @@
     eq(D.querySelectorAll('input[name="q-output"]:checked, input[name="q-audience"]:checked').length, 0, '成果、给谁');
     eq($('q-other').value + $('q-wish').value, '', '自己写的');
     eq(D.querySelectorAll('input[name="q-service"]:checked').length, 0, '问题 5');
-    eq(text($('calc-results')), '', '计算结果');
+    ok(text($('calc-results')).indexOf('还没算') !== -1, '回到还没算的空状态');
+    ok(text($('calc-results')).indexOf('有效剩余') === -1, '没有留下上次的结果');
     ok($('done-banner').hidden, '做完提示');
     eq(cards().length, 0, '推荐');
     eq(W.sessionStorage.getItem('qp-v0'), null, '存的东西');
