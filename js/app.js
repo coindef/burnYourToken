@@ -708,5 +708,9 @@
   }
 
   init();
-  QP.app = { SERVICES: SERVICES, state: state, calculate: calculate, renderRecs: renderRecs, clearAll: clearAll };
+  QP.app = {
+    SERVICES: SERVICES, state: state, calculate: calculate, renderRecs: renderRecs, clearAll: clearAll,
+    // Same-window post, so a reply's source is this tab (the extension content script does this too).
+    postToPage: function (payload) { window.postMessage(payload, '*'); }
+  };
 })();

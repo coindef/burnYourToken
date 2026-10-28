@@ -107,23 +107,31 @@
     }
   }
 
+  function deliverUsage(id, result) {
+    if (!result) return;
+    // Call through the page so postMessage's source is the app window, same as the extension.
+    W.QP.app.postToPage({
+      source: 'byt-extension',
+      type: 'fill-result',
+      id: id,
+      ok: result.ok === true,
+      error: result.error || '',
+      usage: result.usage || null
+    });
+  }
+
   function installUsageBridge(respond) {
     removeUsageBridge();
     function onMsg(event) {
       if (event.source !== W) return;
       const data = event.data;
       if (!data || data.source !== 'byt-page' || data.type !== 'fill-request') return;
-      Promise.resolve(respond(data)).then(result => {
-        if (!result) return;
-        W.postMessage({
-          source: 'byt-extension',
-          type: 'fill-result',
-          id: data.id,
-          ok: result.ok === true,
-          error: result.error || '',
-          usage: result.usage || null
-        }, '*');
-      });
+      const result = respond(data);
+      if (result && typeof result.then === 'function') {
+        result.then(value => deliverUsage(data.id, value));
+        return;
+      }
+      deliverUsage(data.id, result);
     }
     W.__bytBridge = onMsg;
     W.addEventListener('message', onMsg);
