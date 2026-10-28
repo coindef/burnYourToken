@@ -97,7 +97,8 @@ if kind == "tests":
 else:
     ok = ('id="svc-claude"' in dom and 'id="svc-chatgpt"' not in dom
           and 'Leftover Claude quota?' in dom and 'Try sample' in dom
-          and 'Show usage page map' in dom and 'Skip to recommendations' in dom
+          and 'How to copy' in dom and 'Fill from Usage, then Mark done.' in dom
+          and 'Preferences (optional)' in dom and 'Skip to recommendations' in dom
           and 'name="q-output"' in dom and 'name="q-audience"' in dom
           and 'chatgpt' not in dom.lower())
     print("  页面：" + ("正常显示（英文 Claude 用量和问卷都在）" if ok else "没有正常显示"))
