@@ -104,21 +104,77 @@
 
   // ---------------- 测试 ----------------
 
-  test('页面正常加载：两张服务卡、7 个领域选项、还没算时提示先算', async () => {
+  test('页面正常加载：只有 Claude 用量、7 个领域选项、还没算时提示先算', async () => {
     await loadApp(true);
     ok(W.QP && W.QP.app, 'app.js 跑完了');
-    ok($('svc-claude') && $('svc-chatgpt'), '两张服务卡');
+    ok($('svc-claude') && !$('svc-chatgpt'), '只有 Claude，没有 ChatGPT 卡');
     eq(D.querySelectorAll('input[name="q-domain"]').length, 7, '领域选项');
     ok(statusText().indexOf('先在第 1 步') !== -1, '提示先算');
     eq(D.getElementById('clear-btn').textContent.trim(), '清除我的回答', '清除按钮');
+    ok(D.querySelector('input[name="q-service"][value="chatgpt"]'), '问卷第 5 题还在');
   });
 
-  test('页面上写清楚：窗口不是 token 数、用量页给的是百分比和重置时间、档位是经验规则、API 不适用', () => {
-    const t = text(D.querySelector('.honest'));
-    ok(/窗口/.test(t) && /token/.test(t), '窗口 / token');
-    ok(/百分之几/.test(t) && /什么时候重置/.test(t), '百分比和重置时间');
-    ok(/经验规则/.test(t) && /不是厂商给的数字/.test(t), '经验规则');
-    ok(/API/.test(t) && /不适用/.test(t), 'API 不适用');
+  test('先说清楚是两句：用量页只有百分比和重置时间、没有 token 数；大中小是经验规则', () => {
+    const ps = D.querySelectorAll('.honest p');
+    eq(ps.length, 1, '一段');
+    const t = text(ps[0]);
+    eq(t.split('。').filter(Boolean).length, 2, '两句：' + t);
+    ok(/百分之几/.test(t) && /什么时候重置/.test(t) && /token/.test(t), t);
+    ok(/经验规则/.test(t) && /不是厂商给的数字/.test(t), t);
+  });
+
+  test('从 Claude 用量页抄三个数：三行路径、①②③ 对照、填示例试试不自己算', async () => {
+    await fresh();
+    ok(text($('calc-title')).replace(/\s+/g, '').indexOf('从Claude用量页抄三个数') !== -1, text($('calc-title')));
+    const path = Array.from(D.querySelectorAll('.copy-path li')).map(li => li.textContent.trim());
+    eq(path.join('|'), 'Claude|Settings|Usage', '三行路径');
+    ok(text(D.querySelector('.copy-aside')).indexOf('稍有不同') !== -1, '别的产品叫法');
+    eq(D.querySelectorAll('.map-block').length, 3, '示意图三块');
+    eq(D.querySelectorAll('.copy-slot').length, 3, '输入三块');
+    ok(text(D.querySelector('.map-block[data-slot="1"]')).indexOf('72%') !== -1, '① 示例');
+    ok(text(D.querySelector('.map-block[data-slot="2"]')).indexOf('3 小时 12 分钟') !== -1, '② 示例');
+    const block3 = text(D.querySelector('.map-block[data-slot="3"]'));
+    ok(block3.indexOf('31%') !== -1 && block3.indexOf('周四') !== -1, '③ 示例');
+
+    eq(cards().length, 0, '还没算');
+    $('example-btn').click();
+    eq($('claude-plan').value, 'pro', '没选档时示例用 Pro');
+    eq($('claude-s-pct').value, D.querySelector('.map-block[data-slot="1"]').getAttribute('data-pct'), '① 填进百分比');
+    eq($('claude-s-h').value, D.querySelector('.map-block[data-slot="2"]').getAttribute('data-hours'), '② 小时');
+    eq($('claude-s-m').value, D.querySelector('.map-block[data-slot="2"]').getAttribute('data-minutes'), '② 分钟');
+    eq($('claude-w-pct').value, D.querySelector('.map-block[data-slot="3"]').getAttribute('data-pct'), '③ 百分比');
+    eq($('claude-w-day').value, D.querySelector('.map-block[data-slot="3"]').getAttribute('data-day'), '③ 周几');
+    eq($('claude-w-clock').value, D.querySelector('.map-block[data-slot="3"]').getAttribute('data-clock'), '③ 几点');
+    ok(D.querySelector('input[name="claude-mode"][value="used"]').checked, '按已经用了填');
+    eq(cards().length, 0, '填示例不会自己算');
+    calc();
+    eq(resultOf('claude').dataset.band, 'medium', '示例是中档');
+    ok(text(resultOf('claude')).indexOf('有一个只剩 20%–50%') !== -1, '结果写明是哪条规则');
+
+    setVal('claude-plan', 'max20');
+    $('example-btn').click();
+    eq($('claude-plan').value, 'max20', '已经选了档就不改');
+    setVal('claude-plan', 'api');
+    ok($('claude-body').hidden, 'API 先把格子收起来');
+    $('example-btn').click();
+    eq($('claude-plan').value, 'pro', 'API 用示例时改回 Pro');
+    ok(!$('claude-body').hidden, '格子又打开');
+    eq($('claude-s-pct').value, '72', '① 还是示例');
+
+    async function aligned(width) {
+      frame.style.width = width + 'px';
+      await wait(80);
+      ['1', '2', '3'].forEach(slot => {
+        const a = D.querySelector('.map-block[data-slot="' + slot + '"]').getBoundingClientRect();
+        const b = D.querySelector('.copy-slot[data-slot="' + slot + '"]').getBoundingClientRect();
+        ok(Math.abs(a.left - b.left) <= 1, width + ' 左对齐 ' + slot + '：' + a.left + ' / ' + b.left);
+        ok(Math.abs(a.width - b.width) <= 1, width + ' 同宽 ' + slot + '：' + a.width + ' / ' + b.width);
+      });
+      ok(D.documentElement.scrollWidth <= W.innerWidth + 1, width + ' 没有横向滚动');
+    }
+    await aligned(375);
+    await aligned(900);
+    frame.style.width = '';
   });
 
   test('计算器：5 小时已用 85%、周已用 30% → 小档（有一个不到 20%），卡在 5 小时额度；推荐全是小档', async () => {
@@ -400,25 +456,6 @@
     ok(statusText().indexOf('已经做完 1 个') !== -1, '记着做完了几个');
   });
 
-  test('两个服务分开算：结果分开显示、不相加；问题 5 选哪个就按哪个推', async () => {
-    await fresh();
-    fill('claude', { s: 85, w: 30 }); // 小档
-    fill('chatgpt', { plan: 'plus', s: 10, w: 20 }); // 大档
-    calc();
-    eq(resultOf('claude').dataset.band, 'small', 'Claude');
-    eq(resultOf('chatgpt').dataset.band, 'large', 'ChatGPT');
-    const all = text($('calc-results'));
-    ok(all.indexOf('不相加') !== -1, '写明不相加');
-    ok(!/合计|加起来一共|总共剩/.test(all), '没有相加的数字');
-    // 问题 5 没选：按剩得多的那个推，并说明
-    ok(statusText().indexOf('ChatGPT') !== -1 && statusText().indexOf('剩得多') !== -1, '默认按剩得多的推');
-    cards().forEach(c => eq(c.dataset.band, 'large', '默认大档'));
-    pick('input[name="q-service"][value="claude"]');
-    ok(cards().length && cards().every(c => c.dataset.band === 'small'), '选 Claude → 小档');
-    pick('input[name="q-service"][value="chatgpt"]');
-    ok(cards().length && cards().every(c => c.dataset.band === 'large'), '选 ChatGPT → 大档');
-  });
-
   test('问题 5 选了没算过的服务 → 提示先去算', async () => {
     await fresh();
     fill('claude', { s: 30, w: 40 });
@@ -466,14 +503,6 @@
     ok(statusText().indexOf('还没点「算一下」') !== -1, '第 3 步提示');
     calc();
     ok(statusText().indexOf('还没点「算一下」') === -1, '算完提示消失');
-  });
-
-  test('两个服务算出来一样大、问题 5 没选 → 不说「剩得多」，说「一样大」', async () => {
-    await fresh();
-    fill('claude', { s: 30, w: 40 });
-    fill('chatgpt', { plan: 'plus', s: 20, w: 10 });
-    calc();
-    ok(statusText().indexOf('一样大') !== -1 && statusText().indexOf('剩得多') === -1, statusText());
   });
 
   test('全角数字（中文输入法）能算', async () => {
@@ -585,7 +614,6 @@
   async function fullState() {
     await fresh();
     fill('claude', { s: 30, w: 40 });
-    fill('chatgpt', { plan: 'plus', s: 80, w: 30 });
     calc();
     pick('input[name="q-domain"][value="life"]');
     pick('input[name="q-domain"][value="travel"]');

@@ -16,7 +16,7 @@
       <h1>订了 AI 会员，额度总是用不完？</h1>
       <p class="lead">挑一个大小合适的项目，把剩下的额度用在你真正想做的事上。</p>
       <ol class="jump">
-        <li><a href="#calc"><b>1</b> 算算还剩多少</a></li>
+        <li><a href="#calc"><b>1</b> 从 Claude 用量页抄三个数</a></li>
         <li><a href="#quiz"><b>2</b> 说说你想做什么（可跳过）</a></li>
         <li><a href="#recs"><b>3</b> 挑一个项目做完</a></li>
       </ol>
@@ -25,43 +25,65 @@
   </header>
 
   <main class="wrap">
-    <!-- ============ 第 1 步：剩余额度计算器 ============ -->
+    <!-- ============ 第 1 步：从 Claude 用量页抄三个数 ============ -->
     <section id="calc" class="step" aria-labelledby="calc-title">
-      <h2 id="calc-title"><span class="num">1</span>算算还剩多少</h2>
-      <p>打开你订的 AI 服务的「用量」页面，把上面写的数字抄到下面。两个都订了就两个都填——<strong>每个服务分开算，不会加在一起</strong>。</p>
+      <h2 id="calc-title"><span class="num">1</span>从 Claude 用量页抄三个数</h2>
+      <ol class="copy-path" aria-label="打开用量页">
+        <li>Claude</li>
+        <li>Settings</li>
+        <li>Usage</li>
+      </ol>
+      <p class="copy-aside">别的产品这里的名字可能稍有不同。</p>
 
-      <div class="honest" role="note" aria-labelledby="honest-title">
-        <h3 id="honest-title">先说清楚</h3>
-        <ul>
-          <li>厂商公布的是<strong>「窗口」</strong>：比如一段 5 小时的额度、一段一周的额度，到点就重置。他们没有公布每段能用多少 token（AI 计算用量的单位）。</li>
-          <li>用量页给你看的是<strong>用了百分之几</strong>和<strong>什么时候重置</strong>，不是还剩多少 token。</li>
-          <li>所以这里算出的<strong>大、中、小</strong>是我们的<strong>经验规则</strong>，不是厂商给的数字，只能当参考。</li>
-          <li>只算按月付费的会员。如果你是按 API 用量付钱（用多少付多少），没有「窗口」这一说，这里不适用。</li>
-        </ul>
+      <div class="honest" role="note">
+        <p>用量页只给你看用了百分之几、什么时候重置，不公布 token 数。大、中、小是经验规则，不是厂商给的数字。</p>
       </div>
-
-      <figure class="usage-demo">
-        <figcaption>用量页大概长这样（<strong>示意图</strong>，不是真实截图，各家页面不完全一样）：</figcaption>
-        <div class="demo-row">
-          <span class="demo-name">当前会话（5 小时）</span>
-          <span class="demo-bar" aria-hidden="true"><i class="demo-fill-72"></i></span>
-          <span class="demo-num">已用 72%</span>
-          <span class="demo-reset">3 小时 12 分钟后重置</span>
-        </div>
-        <div class="demo-row">
-          <span class="demo-name">每周额度</span>
-          <span class="demo-bar" aria-hidden="true"><i class="demo-fill-31"></i></span>
-          <span class="demo-num">已用 31%</span>
-          <span class="demo-reset">周四 8:00 重置</span>
-        </div>
-        <p class="demo-copy">照着抄就是：5 小时额度填 <b>72</b>，还有 <b>3</b> 小时 <b>12</b> 分钟；每周额度填 <b>31</b>，<b>周四</b>，<b>8:00</b>。</p>
-      </figure>
 
       <p class="msg info" id="restore-note" hidden>已带回你在这个标签页里填过的内容。重置时间可能已经变了，对照用量页确认后，再点「算一下」。</p>
 
       <form id="calc-form" novalidate>
-        <div class="services" id="services"><!-- 由 js/app.js 生成两张服务卡 --></div>
-        <button type="submit" class="primary" id="calc-btn">算一下</button>
+        <label class="field" for="claude-plan">你订的是哪一档？
+          <select id="claude-plan">
+            <option value="">选一下</option>
+            <option value="pro">Pro</option>
+            <option value="max5">Max（5 倍）</option>
+            <option value="max20">Max（20 倍）</option>
+            <option value="team">团队版 / 企业版</option>
+            <option value="other">其他会员档</option>
+            <option value="api">我是按 API 用量付钱的</option>
+          </select>
+        </label>
+        <p class="msg warn" id="claude-api" hidden>按 API 用量付钱没有「窗口」，也就没有「剩余额度」这一说，这个工具不适用。</p>
+
+        <figure class="usage-map">
+          <figcaption>用量页上的三块（<strong>示意图</strong>，不是真实截图）。下面格子的编号和这里一样；数字是示例。</figcaption>
+          <div class="map-grid">
+            <div class="map-block" data-slot="1" data-pct="72">
+              <p class="map-k"><span class="map-mark">①</span> 5 小时额度 · 已经用了</p>
+              <p class="map-v">72%</p>
+              <span class="demo-bar" aria-hidden="true"><i class="demo-fill-72"></i></span>
+            </div>
+            <div class="map-block" data-slot="2" data-hours="3" data-minutes="12">
+              <p class="map-k"><span class="map-mark">②</span> 这段还要多久重置</p>
+              <p class="map-v">3 小时 12 分钟</p>
+            </div>
+            <div class="map-block" data-slot="3" data-pct="31" data-day="4" data-clock="08:00">
+              <p class="map-k"><span class="map-mark">③</span> 每周额度 · 已经用了，<br>周几几点重置</p>
+              <p class="map-v">31% · 周四 8:00</p>
+              <span class="demo-bar" aria-hidden="true"><i class="demo-fill-31"></i></span>
+            </div>
+          </div>
+        </figure>
+
+        <fieldset class="service" id="svc-claude" aria-label="Claude 用量">
+          <div class="svc-body" id="claude-body">
+            <div class="copy-grid" id="services"><!-- 由 js/app.js 生成 ①②③ --></div>
+          </div>
+        </fieldset>
+        <div class="calc-actions">
+          <button type="button" class="secondary" id="example-btn">填示例试试</button>
+          <button type="submit" class="primary" id="calc-btn">算一下</button>
+        </div>
       </form>
 
       <div id="calc-results" class="results" aria-live="polite"></div>
@@ -77,7 +99,6 @@
           <li>5 小时额度本来就几个小时重置一次，它的重置时间不影响档位；只是卡在它上面、它又快重置时，会提醒你重置后再算一次。</li>
           <li>小档：大约 15–30 分钟，聊几轮就够。中档：大约 1 小时，来回聊十几轮。大档：大约 2–3 小时，可以分几次做完。</li>
           <li>只看百分比，不看你订的是哪一档。同样剩 50%，贵的档能做的事更多，但具体多多少厂商没公布，我们也不假装知道。</li>
-          <li>两个服务各算各的，不相加。</li>
         </ol>
       </details>
     </section>

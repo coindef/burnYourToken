@@ -8,15 +8,14 @@
   const core = QP.core;
   const STORE_KEY = 'qp-v0';
 
+  // 这一版只在第 1 步画出 Claude。ChatGPT 先藏起来：问卷第 5 题还留着，选了它会提示先去算。
   const SERVICES = [
     {
-      id: 'claude', name: 'Claude',
-      where: 'Claude 网页版的设置里，找「用量」（Usage）。',
+      id: 'claude', name: 'Claude', shown: true,
       plans: [['pro', 'Pro'], ['max5', 'Max（5 倍）'], ['max20', 'Max（20 倍）'], ['team', '团队版 / 企业版'], ['other', '其他会员档']]
     },
     {
-      id: 'chatgpt', name: 'ChatGPT（Codex）',
-      where: 'Codex 的用量页面（一般在设置里能找到）。',
+      id: 'chatgpt', name: 'ChatGPT（Codex）', shown: false,
       plans: [['plus', 'Plus'], ['pro', 'Pro'], ['business', 'Business / 团队版'], ['enterprise', '企业版 / 教育版'], ['other', '其他会员档']]
     }
   ];
@@ -59,73 +58,85 @@
   const pct = x => Math.round(x * 10) / 10 + '%';
   const hhmm = d => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   const serviceOf = id => SERVICES.find(s => s.id === id);
+  const shownServices = () => SERVICES.filter(s => s.shown);
 
   function planLabel(s, plan) {
     const p = s.plans.find(x => x[0] === plan);
     return p ? p[1] : '';
   }
 
-  // ---------------- 第 1 步：生成两张服务卡 ----------------
+  // ---------------- 第 1 步：①②③ 和示意图对齐 ----------------
 
-  function serviceHTML(s) {
+  function copyFieldsHTML(s) {
     const p = s.id;
-    const plans = s.plans.map(o => '<option value="' + o[0] + '">' + o[1] + '</option>').join('');
     const days = [1, 2, 3, 4, 5, 6, 0].map(d => '<option value="' + d + '">' + core.WEEKDAYS[d] + '</option>').join('');
     return '' +
-      '<fieldset class="service" id="svc-' + p + '">' +
-      '  <legend>' + s.name + '</legend>' +
-      '  <label class="field">你订的是哪一档？' +
-      '    <select id="' + p + '-plan"><option value="">我没订这个</option>' + plans +
-      '      <option value="api">我是按 API 用量付钱的</option></select>' +
+      '<div class="copy-slot" data-slot="1">' +
+      '  <h3><span class="map-mark" aria-hidden="true">①</span> 5 小时额度，已经用了百分之几</h3>' +
+      '  <fieldset class="inline">' +
+      '    <legend class="visually-hidden">百分比是已经用了还是还剩</legend>' +
+      '    <label><input type="radio" name="' + p + '-mode" value="used" checked> 已经用了百分之几</label>' +
+      '    <label><input type="radio" name="' + p + '-mode" value="left"> 还剩百分之几</label>' +
+      '  </fieldset>' +
+      '  <label class="field"><span class="visually-hidden">① 百分比</span>' +
+      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-s-pct" autocomplete="off" placeholder="比如 72" aria-label="① 5 小时额度已经用了百分之几"> %</span>' +
       '  </label>' +
-      '  <p class="msg warn" id="' + p + '-api" hidden>按 API 用量付钱没有「窗口」，也就没有「剩余额度」这一说，这个工具不适用。</p>' +
-      '  <div class="svc-body" id="' + p + '-body" hidden>' +
-      '    <p class="where">去哪抄：' + s.where + '</p>' +
-      '    <fieldset class="inline">' +
-      '      <legend>用量页上写的是</legend>' +
-      '      <label><input type="radio" name="' + p + '-mode" value="used" checked> 已经用了百分之几</label>' +
-      '      <label><input type="radio" name="' + p + '-mode" value="left"> 还剩百分之几</label>' +
-      '    </fieldset>' +
-      '    <div class="window">' +
-      '      <h3>5 小时额度</h3>' +
-      '      <p class="hint">用量页上可能叫 session、当前会话或 5 小时限额。</p>' +
-      '      <label class="field">百分比' +
-      '        <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-s-pct" autocomplete="off" placeholder="比如 80" aria-label="5 小时额度的百分比"> %</span>' +
-      '      </label>' +
-      '      <fieldset class="reset">' +
-      '        <legend>什么时候重置</legend>' +
-      '        <div class="choice">' +
-      '          <input type="radio" name="' + p + '-s-reset" id="' + p + '-s-r-cd" value="countdown" checked>' +
-      '          <label for="' + p + '-s-r-cd">还有</label>' +
-      '          <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-h" autocomplete="off" aria-label="还有几小时"> 小时</span>' +
-      '          <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-m" autocomplete="off" aria-label="还有几分钟"> 分钟</span>' +
-      '        </div>' +
-      '        <div class="choice">' +
-      '          <input type="radio" name="' + p + '-s-reset" id="' + p + '-s-r-ck" value="clock">' +
-      '          <label for="' + p + '-s-r-ck">在</label>' +
-      '          <input type="time" id="' + p + '-s-clock" aria-label="几点几分重置"> 重置' +
-      '        </div>' +
-      '      </fieldset>' +
-      '      <p class="hint">还没开始用（0%、页面上没写重置时间）可以不填。</p>' +
+      '</div>' +
+      '<div class="copy-slot" data-slot="2">' +
+      '  <h3><span class="map-mark" aria-hidden="true">②</span> 这段还要多久重置</h3>' +
+      '  <fieldset class="reset">' +
+      '    <legend class="visually-hidden">② 重置时间</legend>' +
+      '    <div class="choice">' +
+      '      <input type="radio" name="' + p + '-s-reset" id="' + p + '-s-r-cd" value="countdown" checked>' +
+      '      <label for="' + p + '-s-r-cd">还有</label>' +
+      '      <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-h" autocomplete="off" aria-label="② 还有几小时"> 小时</span>' +
+      '      <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-m" autocomplete="off" aria-label="② 还有几分钟"> 分钟</span>' +
       '    </div>' +
-      '    <div class="window">' +
-      '      <h3>每周额度</h3>' +
-      '      <p class="hint">如果有好几条周额度（比如分模型的），抄用得最多的那条。重置时间写的是日期的话，看看那天是周几。</p>' +
-      '      <label class="field">百分比' +
-      '        <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="比如 30" aria-label="每周额度的百分比"> %</span>' +
-      '      </label>' +
-      '      <div class="row">' +
-      '        <label class="field">周几重置 <select id="' + p + '-w-day"><option value="">选一下</option>' + days + '</select></label>' +
-      '        <label class="field">几点 <input type="time" id="' + p + '-w-clock"> <span class="hint">不确定可以不填</span></label>' +
-      '      </div>' +
+      '    <div class="choice">' +
+      '      <input type="radio" name="' + p + '-s-reset" id="' + p + '-s-r-ck" value="clock">' +
+      '      <label for="' + p + '-s-r-ck">或者在</label>' +
+      '      <input type="time" id="' + p + '-s-clock" aria-label="② 几点几分重置"> 重置' +
       '    </div>' +
-      '  </div>' +
-      '</fieldset>';
+      '  </fieldset>' +
+      '  <p class="hint">还没开始用（0%、页面上没写重置时间）可以不填。</p>' +
+      '</div>' +
+      '<div class="copy-slot" data-slot="3">' +
+      '  <h3><span class="map-mark" aria-hidden="true">③</span> 每周额度：已经用了百分之几，<br>周几几点重置</h3>' +
+      '  <label class="field">百分比' +
+      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="比如 31" aria-label="③ 每周额度已经用了百分之几"> %</span>' +
+      '  </label>' +
+      '  <label class="field">周几重置 <select id="' + p + '-w-day" aria-label="③ 每周额度周几重置"><option value="">选一下</option>' + days + '</select></label>' +
+      '  <label class="field">几点 <input type="time" id="' + p + '-w-clock" aria-label="③ 每周额度几点重置"> <span class="hint">不确定可以不填</span></label>' +
+      '  <p class="hint">如果有好几条周额度，抄用得最多的那条。写的是日期的话，看看那天是周几。</p>' +
+      '</div>';
+  }
+
+  // 把示意图上的示例数字填进同样编号的格子。不自己点「算一下」。
+  function fillExample() {
+    const p = 'claude';
+    const block = slot => document.querySelector('.map-block[data-slot="' + slot + '"]');
+    const b1 = block('1');
+    const b2 = block('2');
+    const b3 = block('3');
+    const plan = $(p + '-plan');
+    if (!plan.value || plan.value === 'api') plan.value = 'pro';
+    togglePlan(p);
+    setRadio(p + '-mode', 'used');
+    setRadio(p + '-s-reset', 'countdown');
+    $(p + '-s-pct').value = b1.getAttribute('data-pct');
+    $(p + '-s-h').value = b2.getAttribute('data-hours');
+    $(p + '-s-m').value = b2.getAttribute('data-minutes');
+    $(p + '-s-clock').value = '';
+    $(p + '-w-pct').value = b3.getAttribute('data-pct');
+    $(p + '-w-day').value = b3.getAttribute('data-day');
+    $(p + '-w-clock').value = b3.getAttribute('data-clock');
+    clearInvalid();
+    $('calc-form').dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function togglePlan(p) {
     const plan = $(p + '-plan').value;
-    $(p + '-body').hidden = !plan || plan === 'api';
+    $(p + '-body').hidden = plan === 'api';
     $(p + '-api').hidden = plan !== 'api';
   }
 
@@ -172,7 +183,7 @@
     const now = QP.now();
     state.results = {};
     clearInvalid();
-    SERVICES.forEach(s => {
+    shownServices().forEach(s => {
       const input = readService(s.id);
       if (!input.plan) return;
       const r = core.computeService(input, now);
@@ -249,8 +260,8 @@
     } else if (state.edited) {
       box.appendChild(el('p', { class: 'msg warn', text: '你改了数字，还没重新算。点「算一下」更新。' }));
     }
-    SERVICES.forEach(s => { if (state.results[s.id]) box.appendChild(resultBox(s, state.results[s.id])); });
-    box.appendChild(el('p', { class: 'small', text: '按你点「算一下」那一刻（' + hhmm(state.computedAt) + '）算的。每个服务分开算，不相加。' }));
+    shownServices().forEach(s => { if (state.results[s.id]) box.appendChild(resultBox(s, state.results[s.id])); });
+    box.appendChild(el('p', { class: 'small', text: '按你点「算一下」那一刻（' + hhmm(state.computedAt) + '）算的。' }));
     if (ids.some(id => state.results[id].ok)) {
       box.appendChild(el('p', { class: 'next' }, [
         '下一步：', el('a', { href: '#quiz', text: '说说你想做什么' }), '，或者直接', el('a', { href: '#recs', text: '看推荐的项目' }), '。'
@@ -473,7 +484,7 @@
 
   function goRecalc() {
     $('calc').scrollIntoView({ block: 'start' });
-    const first = SERVICES.map(s => $(s.id + '-s-pct')).find(n => n.offsetParent !== null);
+    const first = shownServices().map(s => $(s.id + '-s-pct')).find(n => n && n.offsetParent !== null);
     (first || $('claude-plan')).focus({ preventScroll: true });
   }
 
@@ -484,7 +495,7 @@
       v: 1, inputs: {}, quiz: readQuiz(),
       done: state.done, doneTitles: state.doneTitles, lastDone: state.lastDone, stale: state.stale
     };
-    SERVICES.forEach(s => { data.inputs[s.id] = readService(s.id); });
+    shownServices().forEach(s => { data.inputs[s.id] = readService(s.id); });
     try { sessionStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { /* 存不了也不影响使用 */ }
   }
 
@@ -492,13 +503,13 @@
     let data = null;
     try { data = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null'); } catch (e) { data = null; }
     if (!data || data.v !== 1) return;
-    SERVICES.forEach(s => writeService(s.id, (data.inputs || {})[s.id] || {}));
+    shownServices().forEach(s => writeService(s.id, (data.inputs || {})[s.id] || {}));
     writeQuiz(data.quiz || {});
     state.done = Array.isArray(data.done) ? data.done.filter(x => typeof x === 'string') : [];
     state.doneTitles = Array.isArray(data.doneTitles) ? data.doneTitles.filter(x => typeof x === 'string') : [];
     state.lastDone = typeof data.lastDone === 'string' ? data.lastDone : '';
     state.stale = !!data.stale && !!state.lastDone;
-    if (SERVICES.some(s => $(s.id + '-plan').value)) $('restore-note').hidden = false;
+    if (shownServices().some(s => $(s.id + '-plan').value)) $('restore-note').hidden = false;
   }
 
   function clearAll() {
@@ -506,7 +517,7 @@
     $('calc-form').reset();
     $('quiz-form').reset();
     Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '' });
-    SERVICES.forEach(s => togglePlan(s.id));
+    shownServices().forEach(s => togglePlan(s.id));
     clearInvalid();
     $('restore-note').hidden = true;
     renderResults();
@@ -518,10 +529,10 @@
   // ---------------- 启动 ----------------
 
   function init() {
-    $('services').innerHTML = SERVICES.map(serviceHTML).join('');
+    $('services').innerHTML = copyFieldsHTML(serviceOf('claude'));
     buildChoiceChips();
 
-    SERVICES.forEach(s => {
+    shownServices().forEach(s => {
       const p = s.id;
       $(p + '-plan').addEventListener('change', () => togglePlan(p));
       // 点进哪种重置时间的输入框，就自动选上那一种
@@ -546,6 +557,7 @@
     quizForm.addEventListener('change', onQuizEdit);
 
     $('clear-btn').addEventListener('click', clearAll);
+    $('example-btn').addEventListener('click', fillExample);
     $('skip-btn').addEventListener('click', skipQuiz);
     $('recalc-btn').addEventListener('click', goRecalc);
 
