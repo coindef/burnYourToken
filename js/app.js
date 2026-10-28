@@ -72,14 +72,15 @@
     const days = [1, 2, 3, 4, 5, 6, 0].map(d => '<option value="' + d + '">' + core.WEEKDAYS[d] + '</option>').join('');
     return '' +
       '<div class="copy-slot" data-slot="1">' +
-      '  <h3><span class="map-mark" aria-hidden="true">①</span> 5 小时额度，已经用了百分之几</h3>' +
+      '  <h3><span class="map-mark" aria-hidden="true">①</span> <span class="mode-label" data-used="5 小时额度，已经用了百分之几" data-left="5 小时额度，还剩百分之几">5 小时额度，已经用了百分之几</span></h3>' +
       '  <fieldset class="inline">' +
       '    <legend class="visually-hidden">百分比是已经用了还是还剩</legend>' +
       '    <label><input type="radio" name="' + p + '-mode" value="used" checked> 已经用了百分之几</label>' +
       '    <label><input type="radio" name="' + p + '-mode" value="left"> 还剩百分之几</label>' +
+      '    <p class="hint">① 和 ③ 的百分比都按这个填。</p>' +
       '  </fieldset>' +
       '  <label class="field"><span class="visually-hidden">① 百分比</span>' +
-      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-s-pct" autocomplete="off" placeholder="比如 72" aria-label="① 5 小时额度已经用了百分之几"> %</span>' +
+      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-s-pct" autocomplete="off" placeholder="比如 72" aria-label="① 5 小时额度已经用了百分之几" data-used-label="① 5 小时额度已经用了百分之几" data-left-label="① 5 小时额度还剩百分之几"> %</span>' +
       '  </label>' +
       '</div>' +
       '<div class="copy-slot" data-slot="2">' +
@@ -101,9 +102,9 @@
       '  <p class="hint">还没开始用（0%、页面上没写重置时间）可以不填。</p>' +
       '</div>' +
       '<div class="copy-slot" data-slot="3">' +
-      '  <h3><span class="map-mark" aria-hidden="true">③</span> 每周额度：已经用了百分之几，<br>周几几点重置</h3>' +
+      '  <h3><span class="map-mark" aria-hidden="true">③</span> <span class="mode-label" data-used="每周额度：已经用了百分之几，" data-left="每周额度：还剩百分之几，">每周额度：已经用了百分之几，</span><br>周几几点重置</h3>' +
       '  <label class="field">百分比' +
-      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="比如 31" aria-label="③ 每周额度已经用了百分之几"> %</span>' +
+      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="比如 31" aria-label="③ 每周额度已经用了百分之几" data-used-label="③ 每周额度已经用了百分之几" data-left-label="③ 每周额度还剩百分之几"> %</span>' +
       '  </label>' +
       '  <label class="field">周几重置 <select id="' + p + '-w-day" aria-label="③ 每周额度周几重置"><option value="">选一下</option>' + days + '</select></label>' +
       '  <label class="field">几点 <input type="time" id="' + p + '-w-clock" aria-label="③ 每周额度几点重置"> <span class="hint">不确定可以不填</span></label>' +
@@ -122,6 +123,7 @@
     if (!plan.value || plan.value === 'api') plan.value = 'pro';
     togglePlan(p);
     setRadio(p + '-mode', 'used');
+    syncModeLabels(p);
     setRadio(p + '-s-reset', 'countdown');
     $(p + '-s-pct').value = b1.getAttribute('data-pct');
     $(p + '-s-h').value = b2.getAttribute('data-hours');
@@ -138,6 +140,21 @@
     const plan = $(p + '-plan').value;
     $(p + '-body').hidden = plan === 'api';
     $(p + '-api').hidden = plan !== 'api';
+  }
+
+  // 已用/还剩是①和③共用的。算的时候两个窗口用同一种；标题和读屏名字跟着选中的那个变。
+  function syncModeLabels(p) {
+    const left = radioValue(p + '-mode') === 'left';
+    document.querySelectorAll('.mode-label').forEach(n => {
+      const next = n.getAttribute(left ? 'data-left' : 'data-used');
+      if (next) n.textContent = next;
+    });
+    [p + '-s-pct', p + '-w-pct'].forEach(id => {
+      const n = $(id);
+      if (!n) return;
+      const next = n.getAttribute(left ? 'data-left-label' : 'data-used-label');
+      if (next) n.setAttribute('aria-label', next);
+    });
   }
 
   function radioValue(name) {
@@ -170,6 +187,7 @@
     set('-w-pct', d.weeklyPct); set('-w-day', d.weeklyDay); set('-w-clock', d.weeklyClock);
     if (d.mode) setRadio(p + '-mode', d.mode);
     if (d.sessionResetType) setRadio(p + '-s-reset', d.sessionResetType);
+    syncModeLabels(p);
     togglePlan(p);
   }
 
@@ -517,7 +535,7 @@
     $('calc-form').reset();
     $('quiz-form').reset();
     Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '' });
-    shownServices().forEach(s => togglePlan(s.id));
+    shownServices().forEach(s => { togglePlan(s.id); syncModeLabels(s.id); });
     clearInvalid();
     $('restore-note').hidden = true;
     renderResults();
@@ -538,6 +556,9 @@
       // 点进哪种重置时间的输入框，就自动选上那一种
       [p + '-s-h', p + '-s-m'].forEach(id => $(id).addEventListener('focus', () => setRadio(p + '-s-reset', 'countdown')));
       $(p + '-s-clock').addEventListener('focus', () => setRadio(p + '-s-reset', 'clock'));
+      document.querySelectorAll('input[name="' + p + '-mode"]').forEach(input => {
+        input.addEventListener('change', () => syncModeLabels(p));
+      });
     });
 
     const calcForm = $('calc-form');

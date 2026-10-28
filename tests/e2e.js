@@ -177,6 +177,59 @@
     frame.style.width = '';
   });
 
+  test('已用/还剩同时管①和③：标签跟着变，每周和 5 小时用同一种算法', async () => {
+    await fresh();
+    const phrase = node => text(node).replace(/\s+/g, '');
+    function labels() {
+      return {
+        h1: phrase(D.querySelector('.copy-slot[data-slot="1"] h3')),
+        h3: phrase(D.querySelector('.copy-slot[data-slot="3"] h3')),
+        d1: phrase(D.querySelector('.map-block[data-slot="1"] .mode-label')),
+        d3: phrase(D.querySelector('.map-block[data-slot="3"] .mode-label')),
+        a1: $('claude-s-pct').getAttribute('aria-label'),
+        a3: $('claude-w-pct').getAttribute('aria-label')
+      };
+    }
+    function expectMode(word, other) {
+      const L = labels();
+      Object.keys(L).forEach(k => {
+        ok(L[k].indexOf(word) !== -1 && L[k].indexOf(other) === -1, k + ' 应是「' + word + '」：' + L[k]);
+      });
+    }
+    expectMode('已经用了', '还剩');
+    ok(text(D.querySelector('.copy-slot[data-slot="1"]')).indexOf('① 和 ③ 的百分比都按这个填') !== -1, '写明两个百分比共用');
+
+    pick('input[name="claude-mode"][value="left"]');
+    expectMode('还剩', '已经用了');
+    fill('claude', { mode: 'left', s: 85, w: 30 });
+    calc();
+    eq(resultOf('claude').dataset.band, 'medium', '85 和 30 按还剩算：每周也是还剩 30%，中档');
+    expectMode('还剩', '已经用了');
+    fill('claude', { mode: 'left', s: 15, w: 70 });
+    calc();
+    eq(resultOf('claude').dataset.band, 'small', '还剩 15/70 与已用 85/30 同一档');
+
+    pick('input[name="claude-mode"][value="used"]');
+    fill('claude', { mode: 'used', s: 85, w: 30 });
+    calc();
+    eq(resultOf('claude').dataset.band, 'small', '改回已用 85/30 是小档');
+    expectMode('已经用了', '还剩');
+
+    pick('input[name="claude-mode"][value="left"]');
+    await reloadApp();
+    ok(D.querySelector('input[name="claude-mode"][value="left"]').checked, '刷新后还是还剩');
+    expectMode('还剩', '已经用了');
+
+    $('example-btn').click();
+    ok(D.querySelector('input[name="claude-mode"][value="used"]').checked, '示例回到已用');
+    expectMode('已经用了', '还剩');
+
+    pick('input[name="claude-mode"][value="left"]');
+    $('clear-btn').click();
+    ok(D.querySelector('input[name="claude-mode"][value="used"]').checked, '清除后回到已用');
+    expectMode('已经用了', '还剩');
+  });
+
   test('计算器：5 小时已用 85%、周已用 30% → 小档（有一个不到 20%），卡在 5 小时额度；推荐全是小档', async () => {
     await fresh();
     fill('claude', { s: 85, w: 30 });
