@@ -526,7 +526,126 @@
     if (shownServices().some(s => $(s.id + '-plan').value)) $('restore-note').hidden = false;
   }
 
+  // Fill from Claude Usage. Copy is the UX lock; one click only writes step 1 fields.
+  const FILL_WORKING = 'Reading Usage…';
+  const FILL_OK = 'Filled from Usage.';
+  const FILL_NO_EXT = 'Extension not found. Copy the three numbers, or load the unpacked extension (see README).';
+  const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
+  const FILL_TIMEOUT_MS = 1500;
+  let fillGen = 0;
+  let fillTimer = 0;
+  let applyingFill = false;
+
+  function showFillStatus(kind, text) {
+    if (fillTimer) { clearTimeout(fillTimer); fillTimer = 0; }
+    const node = $('fill-status');
+    if (!node) return;
+    if (!text) {
+      node.textContent = '';
+      node.hidden = true;
+      node.className = 'fill-status';
+      return;
+    }
+    node.hidden = false;
+    node.className = 'fill-status ' + kind;
+    node.textContent = text;
+    if (kind === 'ok') {
+      fillTimer = setTimeout(() => {
+        fillTimer = 0;
+        showFillStatus('', '');
+      }, 2000);
+    }
+  }
+
+  function requestUsageFill() {
+    return new Promise(resolve => {
+      const id = 'byt-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+      let done = false;
+      function finish(value) {
+        if (done) return;
+        done = true;
+        window.removeEventListener('message', onMsg);
+        clearTimeout(timer);
+        resolve(value);
+      }
+      function onMsg(event) {
+        if (event.source !== window) return;
+        const data = event.data;
+        if (!data || data.source !== 'byt-extension' || data.type !== 'fill-result' || data.id !== id) return;
+        finish(data);
+      }
+      const timer = setTimeout(() => finish({ ok: false, error: 'no-extension' }), FILL_TIMEOUT_MS);
+      window.addEventListener('message', onMsg);
+      window.postMessage({ source: 'byt-page', type: 'fill-request', id: id }, '*');
+    });
+  }
+
+  function assignField(id, value) {
+    if (value == null || value === '') return;
+    $(id).value = String(value);
+  }
+
+  // Writes only Session, Resets in, and Weekly (plus weekday/time when the read included them).
+  function writeUsage(p, u) {
+    if (!u) return;
+    if (u.mode === 'used' || u.mode === 'left') {
+      setRadio(p + '-mode', u.mode);
+      syncModeLabels(p);
+    }
+    assignField(p + '-s-pct', u.sessionPct);
+    if (u.sessionResetType === 'clock') {
+      setRadio(p + '-s-reset', 'clock');
+      $(p + '-s-clock').value = u.sessionClock ? String(u.sessionClock) : '';
+      $(p + '-s-h').value = '';
+      $(p + '-s-m').value = '';
+    } else if (u.sessionResetType === 'countdown') {
+      setRadio(p + '-s-reset', 'countdown');
+      $(p + '-s-h').value = u.sessionH == null ? '' : String(u.sessionH);
+      $(p + '-s-m').value = u.sessionM == null ? '' : String(u.sessionM);
+      $(p + '-s-clock').value = '';
+    } else if (u.sessionResetType === 'none') {
+      setRadio(p + '-s-reset', 'countdown');
+      $(p + '-s-h').value = '';
+      $(p + '-s-m').value = '';
+      $(p + '-s-clock').value = '';
+    }
+    assignField(p + '-w-pct', u.weeklyPct);
+    if (u.weeklyDay != null && u.weeklyDay !== '') $(p + '-w-day').value = String(u.weeklyDay);
+    if (u.weeklyClock) $(p + '-w-clock').value = String(u.weeklyClock);
+  }
+
+  async function fillFromUsage() {
+    const gen = ++fillGen;
+    showFillStatus('working', FILL_WORKING);
+    let result = null;
+    try {
+      result = await requestUsageFill();
+    } catch (e) {
+      result = { ok: false, error: 'parse' };
+    }
+    if (gen !== fillGen) return;
+    if (!result || result.ok !== true || !result.usage || result.usage.sessionPct == null || result.usage.weeklyPct == null) {
+      showFillStatus('warn', result && result.error === 'no-extension' ? FILL_NO_EXT : FILL_PARSE);
+      return;
+    }
+    applyingFill = true;
+    try {
+      writeUsage('claude', result.usage);
+      clearInvalid();
+      $('calc-form').dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) {
+      applyingFill = false;
+      if (gen === fillGen) showFillStatus('warn', FILL_PARSE);
+      return;
+    }
+    applyingFill = false;
+    if (gen !== fillGen) return;
+    showFillStatus('ok', FILL_OK);
+  }
+
   function clearAll() {
+    fillGen += 1;
+    showFillStatus('', '');
     try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* 没存过 */ }
     $('calc-form').reset();
     $('quiz-form').reset();
@@ -561,6 +680,10 @@
     calcForm.addEventListener('submit', e => { e.preventDefault(); calculate(); });
     const onCalcEdit = () => {
       $('clear-msg').hidden = true;
+      if (!applyingFill) {
+        fillGen += 1;
+        showFillStatus('', '');
+      }
       if (state.computedAt && !state.edited) { state.edited = true; renderResults(); renderRecs(); }
       save();
     };
@@ -574,6 +697,7 @@
     quizForm.addEventListener('change', onQuizEdit);
 
     $('clear-btn').addEventListener('click', clearAll);
+    $('fill-usage-btn').addEventListener('click', fillFromUsage);
     $('example-btn').addEventListener('click', fillExample);
     $('skip-btn').addEventListener('click', skipQuiz);
     $('recalc-btn').addEventListener('click', goRecalc);

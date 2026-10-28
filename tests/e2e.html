@@ -16,12 +16,14 @@
 <body>
   <!-- 被测页面放在 iframe 里，像用户一样填表、点按钮 -->
   <iframe id="app" title="被测页面"></iframe>
+  <iframe id="usage-fixture" src="fixtures/claude-usage.html" title="Usage fixture" style="position:absolute;left:-9999px;width:800px;height:600px;border:0"></iframe>
   <div class="report">
     <h1>页面流程测试：计算器 → 问卷 → 推荐 → 做完再算</h1>
     <p>需要用本地静态服务器打开（iframe 同源才能操作）：在项目目录运行 <code>python3 -m http.server 8000</code>，再打开 <code>http://localhost:8000/tests/e2e.html</code>。</p>
     <p id="summary">运行中…</p>
     <ol id="out"></ol>
   </div>
+  <script src="../extension/usage-parse.js"></script>
   <script src="harness.js"></script>
   <script src="e2e.js"></script>
 </body>

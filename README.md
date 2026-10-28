@@ -16,6 +16,25 @@ Another port: `PORT=8765 sh scripts/serve.sh`. Stop it with Ctrl+C in that windo
 
 You can also open `index.html` directly (`xdg-open index.html` on Linux, `open index.html` on macOS). The page only loads `css/` and `js/` next to it.
 
+## Fill from Claude Usage
+
+Optional. Copying the three numbers by hand still works if you never load the extension.
+
+The extension does not calculate, does not mark a project done, and does not read Usage when the page loads. It does not call Claude. After you click **Fill from Claude Usage**, it reads the Usage tab you already have open.
+
+### Load the unpacked extension
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode**.
+3. Click **Load unpacked** and choose the `extension` folder in this project.
+4. If you open `index.html` as a file instead of the local server, open that extension’s details and turn on **Allow access to file URLs**.
+5. In Chrome, open Claude → Settings → Usage and leave that tab open: `https://claude.ai/settings/usage`.
+6. Open this page, pick a plan, click **Fill from Claude Usage**, then click **Calculate**.
+
+### Without the extension
+
+Copy **Session**, **Resets in**, and **Weekly** from Claude → Settings → Usage into step 1, then click **Calculate**. **Try sample** still fills the example numbers.
+
 ## Try it
 
 1. Click **Try sample**. Example numbers fill in and a project shows up.

@@ -13,12 +13,14 @@
   </style>
 </head>
 <body>
+  <iframe id="usage-fixture" src="fixtures/claude-usage.html" title="Usage fixture" style="position:absolute;left:-9999px;width:800px;height:600px;border:0"></iframe>
   <h1>单元测试：计算器 + 推荐 + 项目库</h1>
   <p>双击打开就能跑，不联网。</p>
   <p id="summary">运行中…</p>
   <ol id="out"></ol>
   <script src="../js/projects.js"></script>
   <script src="../js/core.js"></script>
+  <script src="../extension/usage-parse.js"></script>
   <script src="harness.js"></script>
   <script src="unit.js"></script>
 </body>
