@@ -8,15 +8,15 @@
   const core = QP.core;
   const STORE_KEY = 'qp-v0';
 
-  // 这一版只在第 1 步画出 Claude。ChatGPT 先藏起来：问卷第 5 题还留着，选了它会提示先去算。
+  // This version draws Claude only. ChatGPT stays in the catalog data with shown:false and has no quiz control.
   const SERVICES = [
     {
       id: 'claude', name: 'Claude', shown: true,
-      plans: [['pro', 'Pro'], ['max5', 'Max（5 倍）'], ['max20', 'Max（20 倍）'], ['team', '团队版 / 企业版'], ['other', '其他会员档']]
+      plans: [['pro', 'Pro'], ['max5', 'Max (5×)'], ['max20', 'Max (20×)'], ['team', 'Team / Enterprise'], ['other', 'Other plan']]
     },
     {
       id: 'chatgpt', name: 'ChatGPT（Codex）', shown: false,
-      plans: [['plus', 'Plus'], ['pro', 'Pro'], ['business', 'Business / 团队版'], ['enterprise', '企业版 / 教育版'], ['other', '其他会员档']]
+      plans: [['plus', 'Plus'], ['pro', 'Pro'], ['business', 'Business / Team'], ['enterprise', 'Enterprise / Education'], ['other', 'Other plan']]
     }
   ];
 
@@ -72,47 +72,47 @@
     const days = [1, 2, 3, 4, 5, 6, 0].map(d => '<option value="' + d + '">' + core.WEEKDAYS[d] + '</option>').join('');
     return '' +
       '<div class="copy-slot" data-slot="1">' +
-      '  <h3><span class="map-mark" aria-hidden="true">①</span> <span class="mode-label" data-used="5 小时额度，已经用了百分之几" data-left="5 小时额度，还剩百分之几">5 小时额度，已经用了百分之几</span> <span class="en">Session</span></h3>' +
+      '  <h3><span class="map-mark" aria-hidden="true">①</span> <span class="mode-label" data-used="Session — % used" data-left="Session — % left">Session — % used</span></h3>' +
       '  <fieldset class="inline">' +
-      '    <legend class="visually-hidden">百分比是已经用了还是还剩</legend>' +
-      '    <label><input type="radio" name="' + p + '-mode" value="used" checked> 已经用了百分之几</label>' +
-      '    <label><input type="radio" name="' + p + '-mode" value="left"> 还剩百分之几</label>' +
-      '    <p class="hint">① 和 ③ 的百分比都按这个填。</p>' +
+      '    <legend class="visually-hidden">Are the percentages used or left</legend>' +
+      '    <label><input type="radio" name="' + p + '-mode" value="used" checked> % used</label>' +
+      '    <label><input type="radio" name="' + p + '-mode" value="left"> % left</label>' +
+      '    <p class="hint">Session and Weekly percentages both use this.</p>' +
       '  </fieldset>' +
-      '  <label class="field"><span class="visually-hidden">① 百分比</span>' +
-      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-s-pct" autocomplete="off" placeholder="比如 72" aria-label="① 5 小时额度已经用了百分之几" data-used-label="① 5 小时额度已经用了百分之几" data-left-label="① 5 小时额度还剩百分之几"> %</span>' +
+      '  <label class="field"><span class="visually-hidden">Session percent</span>' +
+      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-s-pct" autocomplete="off" placeholder="e.g. 72" aria-label="Session percent used" data-used-label="Session percent used" data-left-label="Session percent left"> %</span>' +
       '  </label>' +
       '</div>' +
       '<div class="copy-slot" data-slot="2">' +
-      '  <h3><span class="map-mark" aria-hidden="true">②</span> 这段还要多久重置 <span class="en">Resets in</span></h3>' +
+      '  <h3><span class="map-mark" aria-hidden="true">②</span> Resets in</h3>' +
       '  <fieldset class="reset">' +
-      '    <legend class="visually-hidden">② 重置时间</legend>' +
+      '    <legend class="visually-hidden">Resets in</legend>' +
       '    <div class="choice">' +
       '      <input type="radio" name="' + p + '-s-reset" id="' + p + '-s-r-cd" value="countdown" checked>' +
-      '      <label for="' + p + '-s-r-cd">还有</label>' +
-      '      <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-h" autocomplete="off" aria-label="② 还有几小时"> 小时</span>' +
-      '      <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-m" autocomplete="off" aria-label="② 还有几分钟"> 分钟</span>' +
+      '      <label for="' + p + '-s-r-cd">In</label>' +
+      '      <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-h" autocomplete="off" aria-label="Resets in hours"> hr</span>' +
+      '      <span class="unit"><input type="text" inputmode="numeric" class="short" id="' + p + '-s-m" autocomplete="off" aria-label="Resets in minutes"> min</span>' +
       '    </div>' +
       '    <div class="choice">' +
       '      <input type="radio" name="' + p + '-s-reset" id="' + p + '-s-r-ck" value="clock">' +
-      '      <label for="' + p + '-s-r-ck">或者在</label>' +
-      '      <input type="time" id="' + p + '-s-clock" aria-label="② 几点几分重置"> 重置' +
+      '      <label for="' + p + '-s-r-ck">Or at</label>' +
+      '      <input type="time" id="' + p + '-s-clock" aria-label="Resets at">' +
       '    </div>' +
       '  </fieldset>' +
-      '  <p class="hint">还没开始用（0%、页面上没写重置时间）可以不填。这一格对应用量页上的 Resets in。</p>' +
+      '  <p class="hint">Skip if unused or blank.</p>' +
       '</div>' +
       '<div class="copy-slot" data-slot="3">' +
-      '  <h3><span class="map-mark" aria-hidden="true">③</span> <span class="mode-label" data-used="每周额度：已经用了百分之几，" data-left="每周额度：还剩百分之几，">每周额度：已经用了百分之几，</span> <span class="en">Weekly</span><br>周几几点重置</h3>' +
-      '  <label class="field">百分比' +
-      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="比如 31" aria-label="③ 每周额度已经用了百分之几" data-used-label="③ 每周额度已经用了百分之几" data-left-label="③ 每周额度还剩百分之几"> %</span>' +
+      '  <h3><span class="map-mark" aria-hidden="true">③</span> <span class="mode-label" data-used="Weekly — % used" data-left="Weekly — % left">Weekly — % used</span></h3>' +
+      '  <label class="field">Percent' +
+      '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="e.g. 31" aria-label="Weekly percent used" data-used-label="Weekly percent used" data-left-label="Weekly percent left"> %</span>' +
       '  </label>' +
-      '  <label class="field">周几重置 <select id="' + p + '-w-day" aria-label="③ 每周额度周几重置"><option value="">选一下</option>' + days + '</select></label>' +
-      '  <label class="field">几点 <input type="time" id="' + p + '-w-clock" aria-label="③ 每周额度几点重置"> <span class="hint">不确定可以不填</span></label>' +
-      '  <p class="hint">如果有好几条周额度，抄用得最多的那条。写的是日期的话，看看那天是周几。</p>' +
+      '  <label class="field">Weekday <select id="' + p + '-w-day" aria-label="Weekly reset weekday"><option value="">Choose</option>' + days + '</select></label>' +
+      '  <label class="field">Time <input type="time" id="' + p + '-w-clock" aria-label="Weekly reset time"> <span class="hint">optional</span></label>' +
+      '  <p class="hint">If several weekly limits are listed, copy the fullest one.</p>' +
       '</div>';
   }
 
-  // 把示意图上的示例数字填进同样编号的格子。不自己点「算一下」。
+  // Fill the sample numbers from the map, then calculate. One click to a first result.
   function fillExample() {
     const p = 'claude';
     const block = slot => document.querySelector('.map-block[data-slot="' + slot + '"]');
@@ -134,6 +134,7 @@
     $(p + '-w-clock').value = b3.getAttribute('data-clock');
     clearInvalid();
     $('calc-form').dispatchEvent(new Event('input', { bubbles: true }));
+    calculate();
   }
 
   function togglePlan(p) {
@@ -224,51 +225,44 @@
   }
 
   function resultBox(s, r) {
-    const name = s.name + (planLabel(s, r.plan) ? '（' + planLabel(s, r.plan) + '）' : '');
+    const name = s.name + (planLabel(s, r.plan) ? ' (' + planLabel(s, r.plan) + ')' : '');
     if (!r.ok) {
       return el('div', { class: 'result result-error', 'data-service': s.id }, [
-        el('p', { class: 'result-title', text: name + '：' + (r.notApplicable ? '不适用' : '①②③ 还没抄齐') }),
+        el('p', { class: 'result-title', text: r.notApplicable ? 'Doesn’t apply' : 'Missing Session / Resets in / Weekly' }),
+        el('p', { class: 'small', text: name }),
         el('ul', null, r.errors.map(e => el('li', { text: e.msg })))
       ]);
     }
     const info = core.BAND_INFO[r.band];
     const W = core.WINDOW_NAME;
     const R = core.RULES;
-    const neck = { session: '卡在 5 小时额度', weekly: '卡在每周额度', both: '两个一样多' }[r.bottleneck];
+    const neck = { session: 'Limited by Session', weekly: 'Limited by Weekly', both: 'Both the same' }[r.bottleneck];
     const why = [
-      '5 小时额度还剩 ' + pct(r.sessionLeft) + '，每周额度还剩 ' + pct(r.weeklyLeft) +
-        '。取少的那个：有效剩余 ' + pct(r.effective) + '（' + neck + '）。',
-      '离每周额度重置：' + core.formatUntil(r.weeklyHours) + '；离 5 小时额度重置：' + core.formatUntil(r.sessionHours) + '。'
+      'Session left ' + pct(r.sessionLeft) + ', Weekly left ' + pct(r.weeklyLeft) +
+        '. The smaller one: effective left ' + pct(r.effective) + ' (' + neck + ').',
+      'Until Weekly resets: ' + core.formatUntil(r.weeklyHours) + '. Until Session resets: ' + core.formatUntil(r.sessionHours) + '.'
     ];
-    // 写清楚是哪一条规则定的档
     if (r.timeCapped && r.band === 'small') {
-      why.push('按剩余本来能做' + core.BAND_INFO[r.baseBand].label + '，但离每周额度重置只剩几小时（不到 ' + R.fewHours +
-        ' 小时），时间只够做小档。重置以后再回来算一次。');
+      why.push('By what’s left this could be ' + core.BAND_INFO[r.baseBand].label +
+        ', but only a few hours remain until the weekly reset (under ' + R.fewHours +
+        ' hours), so this is Small. Calculate again after the reset.');
     } else if (r.timeCapped) {
-      why.push('两个都剩 ' + R.largeAbove + '% 以上，本来能做大档，但离每周额度重置不到 1 天。大档要 2–3 小时、常常要分几次做，所以先推中档。');
+      why.push('Both are over ' + R.largeAbove + '%, which could be Large, but the weekly reset is under 1 day. Large takes 2–3 hours, often across more than one sitting, so this is Medium.');
     } else if (r.band === 'large') {
-      why.push('两个都剩 ' + R.largeAbove + '% 以上，离每周额度重置也还有 1 天以上，所以是大档。');
+      why.push('Both are over ' + R.largeAbove + '%, and the weekly reset is more than 1 day away, so this is Large.');
     } else if (r.band === 'medium') {
-      why.push('有一个只剩 ' + R.smallBelow + '%–' + R.largeAbove + '%，所以是中档。');
+      why.push('One window is only ' + R.smallBelow + '%–' + R.largeAbove + '% left, so this is Medium.');
     } else if (r.band === 'small') {
-      why.push('有一个剩不到 ' + R.smallBelow + '%，所以是小档。');
+      why.push('One window is under ' + R.smallBelow + '% left, so this is Small.');
     }
     const summary = r.band === 'none'
-      ? '现在没有剩余，先别开新项目。等「' + W[r.waitFor.which] + '」重置（' + core.formatUntil(r.waitFor.hours) + '）再回来算。'
-      : '能做' + info.label + '的项目：' + info.time + '。';
+      ? 'Nothing left. Wait for ' + W[r.waitFor.which] + ' to reset (' + core.formatUntil(r.waitFor.hours) + '), then calculate again.'
+      : info.label + ' projects: ' + info.time + '.';
     return el('div', { class: 'result band-' + r.band, 'data-service': s.id, 'data-band': r.band }, [
-      el('p', { class: 'result-title' }, [name + '：', el('span', { class: 'badge', text: info.label })]),
+      el('p', { class: 'result-title' }, [name + ': ', el('span', { class: 'badge', text: info.label })]),
       el('p', { class: 'result-summary', text: summary }),
       el('ul', { class: 'why' }, why.map(t => el('li', { text: t }))),
       r.notes.length ? el('ul', { class: 'notes' }, r.notes.map(t => el('li', { text: t }))) : null
-    ]);
-  }
-
-  // 还没点过「算一下」：告诉第一次来的人三个数是什么、下一步点哪里。
-  function emptyCalcGuide() {
-    return el('div', { class: 'empty-guide', role: 'status' }, [
-      el('p', { class: 'empty-title', text: '还没算。现在不会出档位，也不会出现项目。' }),
-      el('p', { text: '把上面 ①②③ 从 Claude → Settings → Usage 抄进格子，或先点「填示例试试」，再点「算一下」。点推荐卡片之前不会自动开始，也不会去读用量页。' })
     ]);
   }
 
@@ -276,24 +270,25 @@
     const box = $('calc-results');
     box.textContent = '';
     if (!state.computedAt) {
-      box.appendChild(emptyCalcGuide());
+      box.appendChild(el('p', { class: 'empty-title', text: 'Nothing calculated yet.' }));
+      box.appendChild(el('p', { class: 'empty-hint', text: 'Paste Session / Resets in / Weekly from Usage, or try the sample.' }));
       return;
     }
     const ids = Object.keys(state.results);
     if (!ids.length) {
-      box.appendChild(el('p', { class: 'msg warn', text: '还没选档位。先选你订的 Claude 是哪一档，把 ①②③ 填上，再点「算一下」。' }));
+      box.appendChild(el('p', { class: 'msg warn', text: 'Choose a plan, then Calculate.' }));
       return;
     }
     if (state.stale) {
-      box.appendChild(el('p', { class: 'msg warn', text: '下面是做项目之前算的，已经过时了。对照用量页把数字更新一下，再点「算一下」。' }));
+      box.appendChild(el('p', { class: 'msg warn', text: 'These numbers are out of date. Update them from Usage, then Calculate.' }));
     } else if (state.edited) {
-      box.appendChild(el('p', { class: 'msg warn', text: '你改了数字，还没重新算。点「算一下」更新。' }));
+      box.appendChild(el('p', { class: 'msg warn', text: 'You changed the numbers. Click Calculate to update.' }));
     }
     shownServices().forEach(s => { if (state.results[s.id]) box.appendChild(resultBox(s, state.results[s.id])); });
-    box.appendChild(el('p', { class: 'small', text: '按你点「算一下」那一刻（' + hhmm(state.computedAt) + '）算的。' }));
+    box.appendChild(el('p', { class: 'small', text: 'Calculated when you clicked Calculate (' + hhmm(state.computedAt) + ').' }));
     if (ids.some(id => state.results[id].ok)) {
       box.appendChild(el('p', { class: 'next' }, [
-        '下一步：', el('a', { href: '#quiz', text: '说说你想做什么' }), '，或者直接', el('a', { href: '#recs', text: '看推荐的项目' }), '。'
+        'Next: ', el('a', { href: '#quiz', text: 'Preferences' }), ', or ', el('a', { href: '#recs', text: 'Pick a project' }), '.'
       ]));
     }
   }
@@ -312,7 +307,7 @@
       c.list().forEach(d => {
         $(c.box).appendChild(el('label', { class: 'chip' + (d.hint ? ' chip-2line' : '') }, [
           el('input', { type: 'checkbox', name: c.name, value: d.id }),
-          el('span', null, [d.label, d.hint ? el('span', { class: 'chip-hint', text: '比如：' + d.hint }) : null])
+          el('span', null, [d.label, d.hint ? el('span', { class: 'chip-hint', text: 'e.g. ' + d.hint }) : null])
         ]));
       });
     });
@@ -339,7 +334,10 @@
   // 用哪个服务的剩余来推荐：问卷第 5 题选了就用它；没选就用算过的那个；两个都算了就用剩得多的。
   // 只挑一个，不相加。
   function pickService(quiz) {
-    if (quiz.service) return { id: quiz.service, reason: 'chosen' };
+    if (quiz.service) {
+      const chosen = serviceOf(quiz.service);
+      if (chosen && chosen.shown) return { id: quiz.service, reason: 'chosen' };
+    }
     const ok = SERVICES.filter(s => state.results[s.id] && state.results[s.id].ok);
     if (!ok.length) {
       const any = SERVICES.find(s => state.results[s.id]);
@@ -358,40 +356,33 @@
   function card(p, top) {
     const info = core.BAND_INFO[p.band];
     const why = p.why || { band: '', matches: [], summary: '' };
+    const pref = why.matches.length ? why.matches.join(' ') : why.summary;
+    const bullets = [];
+    if (why.band) bullets.push(el('li', { class: 'why-band', text: why.band }));
+    if (pref) bullets.push(el('li', { class: 'why-pref', text: pref }));
     return el('article', { class: 'card band-' + p.band, 'data-id': p.id, 'data-band': p.band, 'data-top': top ? '1' : null }, [
       el('div', { class: 'card-top' }, [
-        el('span', null, [el('span', { class: 'badge', text: info.label }), top ? el('span', { class: 'top-tag', text: '最贴合你' }) : null]),
-        el('span', { class: 'domain', text: p.custom ? '按你写的事' : core.domainLabel(p.domain) })
+        el('span', null, [
+          el('span', { class: 'badge', text: info.label }),
+          top ? el('span', { class: 'top-tag', text: 'Best match' }) : null
+        ]),
+        el('span', { class: 'time', text: info.time })
       ]),
       el('h3', { text: p.title }),
-      el('dl', null, [
-        el('dt', { text: '档位' }),
-        el('dd', null, [info.label + ' · ' + info.time, el('span', { class: 'why-band', text: why.band })]),
-        el('dt', { text: '为什么推给你' }),
-        el('dd', { class: 'why-pref' }, why.matches.length
-          ? [el('ul', null, why.matches.map(t => el('li', { text: t })))]
-          : [el('span', { class: 'why-none', text: why.summary })]),
-        el('dt', { text: '目标产出' }), el('dd', { text: p.output }),
-        el('dt', { text: '大概步骤' }), el('dd', null, [el('ol', null, p.steps.map(t => el('li', { text: t })))]),
-        el('dt', { text: '验收标准（做完手里有什么）' }), el('dd', { text: p.done })
+      el('p', { class: 'domain', text: p.custom ? 'From what you wrote' : core.domainLabel(p.domain) }),
+      el('p', { class: 'k', text: 'Why' }),
+      el('ul', { class: 'why' }, bullets.slice(0, 2)),
+      el('p', { class: 'done-when' }, [el('span', { class: 'k', text: 'Done when:' }), ' ' + (p.done || '')]),
+      el('details', { class: 'steps' }, [
+        el('summary', { text: 'Show steps' }),
+        el('ol', null, (p.steps || []).map(t => el('li', { text: t })))
       ]),
-      el('button', { type: 'button', class: 'done-btn', text: '我做完了', onclick: () => markDone(p) })
+      el('button', { type: 'button', class: 'done-btn', text: 'Mark done', onclick: () => markDone(p) })
     ]);
   }
 
   function status(text, cls) {
     $('recs-status').appendChild(el('p', { class: 'msg ' + (cls || 'info'), text: text }));
-  }
-
-  // 上一次算的结果里，离每周额度重置还有多久（做完一个以后提醒：在那之前都可以接着做）
-  function roundLine(quiz) {
-    const pick = pickService(quiz);
-    const r = pick && state.results[pick.id];
-    if (!r || !r.ok || !state.computedAt) return '';
-    const left = r.weeklyHours - (QP.now() - state.computedAt) / 3600000;
-    const when = Math.round(left * 60) <= 0 ? '马上就要重置了' : '离重置还有 ' + core.formatHours(left);
-    return '按上次算的，' + serviceOf(pick.id).name + ' 的每周额度' + when +
-      '。在那之前，做完一个就回来算一次，接着做下一个；额度用完或者重置了，这一轮就结束。';
   }
 
   function renderRecs() {
@@ -407,33 +398,28 @@
     $('done-banner').hidden = !state.stale;
 
     const quiz = readQuiz();
-    if (state.stale) {
-      $('done-title').textContent = '做完「' + state.lastDone + '」了，真不错！';
-      $('done-round').textContent = roundLine(quiz);
-      status('先重新算一次剩余，这里才会推下一个。', 'warn');
-      return;
-    }
+    if (state.stale) return;
 
     const pick = pickService(quiz);
     if (!pick) {
-      status('还没有项目卡。先在第 1 步把 ①②③ 抄好并点「算一下」。卡片出来以后你自己点；不会自动开始，也不会自动消耗额度。', 'info empty-guide');
+      status('Calculate in step 1 to see projects.');
       return;
     }
     const svc = serviceOf(pick.id);
     const r = state.results[pick.id];
     if (!r) {
-      status('你在问题 5 选了 ' + svc.name + '，但第 1 步还没算它的剩余。先去算一下，或者把问题 5 换成你算过的服务。', 'warn');
+      status('Step 1 has not calculated ' + svc.name + ' yet.', 'warn');
       return;
     }
     if (!r.ok) {
       status(r.notApplicable
-        ? svc.name + ' 按 API 用量付钱，用量页上没有这三个百分比，这里不适用，没法推荐。'
-        : '①②③ 还有没填好的（红框那一格）。先回第 1 步改完，再点「算一下」，这里才会出项目卡。', 'warn');
+        ? 'API billing has no session/weekly window — this tool doesn’t apply.'
+        : 'Finish Session, Resets in, and Weekly in step 1.', 'warn');
       return;
     }
     if (r.band === 'none') {
-      status(svc.name + ' 的额度现在用完了，这里没有项目卡。等「' + core.WINDOW_NAME[r.waitFor.which] +
-        '」重置（' + core.formatUntil(r.waitFor.hours) + '）再把三个数抄回来算。', 'warn');
+      status(svc.name + ' has nothing left. Wait for ' + core.WINDOW_NAME[r.waitFor.which] +
+        ' to reset (' + core.formatUntil(r.waitFor.hours) + '), then calculate again.', 'warn');
       return;
     }
 
@@ -444,36 +430,35 @@
       domains: quiz.domains, otherDomain: quiz.other, wish: quiz.wish, outputs: quiz.outputs, audiences: quiz.audiences
     });
 
-    let head = '按 ' + svc.name + ' 的剩余推荐：' + info.label + '（' + info.time + '）。只推这一档，不会推超过你剩余的项目。';
-    if (pick.reason === 'bigger') head += '你两个服务都算了、问题 5 没选，就先按剩得多的那个推；想换就去问题 5 选。';
-    if (pick.reason === 'tie') head += '你两个服务算出来一样大、问题 5 没选，就先按 ' + svc.name + ' 推；想换就去问题 5 选。';
+    let head = 'From what’s left on ' + svc.name + ': ' + info.label + ' (' + info.time + '). Only this band.';
+    if (pick.reason === 'bigger') head += ' Two results were tied to different bands; this is the larger one.';
+    if (pick.reason === 'tie') head += ' Two results matched; this one is ' + svc.name + '.';
     status(head, 'band band-' + r.band);
-    if (state.edited) status('你在第 1 步改了数字，还没点「算一下」，下面还是按上一次的结果推荐的。', 'warn');
+    if (state.edited) status("You changed the numbers and haven't clicked Calculate. Projects below still use the last result.", 'warn');
 
     if (!rec.personalized) {
-      status('你没填第 2 步（或者跳过了），先按档位把这一档所有领域的项目都列出来。每张卡上都写着为什么推它；填了问卷会排得更合你心意。');
+      status('No preferences yet (or you skipped), so this lists every project in the band.');
     } else {
       const label = (list, id) => (list.find(x => x.id === id) || { label: id }).label;
       const picked = quiz.domains.map(core.domainLabel).concat(quiz.other.trim() ? [quiz.other.trim()] : []);
       const parts = [];
-      if (picked.length) parts.push('领域：' + picked.join('、'));
-      if (quiz.wish.trim()) parts.push('想做的事：' + quiz.wish.trim());
-      if (quiz.outputs.length) parts.push('想要的成果：' + quiz.outputs.map(id => label(QP.OUTPUTS, id)).join('、'));
-      if (quiz.audiences.length) parts.push('给谁：' + quiz.audiences.map(id => label(QP.AUDIENCES, id)).join('、'));
-      status('按你的回答排的——' + parts.join('；') + '。对上的越多排得越前，每张卡上写着对上了哪几点。');
+      if (picked.length) parts.push('Area: ' + picked.join(', '));
+      if (quiz.wish.trim()) parts.push('Want to do: ' + quiz.wish.trim());
+      if (quiz.outputs.length) parts.push('Outcome: ' + quiz.outputs.map(id => label(QP.OUTPUTS, id)).join(', '));
+      if (quiz.audiences.length) parts.push('For: ' + quiz.audiences.map(id => label(QP.AUDIENCES, id)).join(', '));
+      status('Sorted by your answers — ' + parts.join('; ') + '.');
     }
     if (state.doneTitles.length) {
-      status('这一轮已经做完 ' + state.doneTitles.length + ' 个：' + state.doneTitles.join('、') + '。做完的不会再推。', 'ok');
+      status('Finished ' + state.doneTitles.length + ' this round: ' + state.doneTitles.join(', ') + '. Finished ones stay hidden.', 'ok');
     }
 
     const mine = rec.cards.filter(p => p.custom).length;
     if (rec.cards.length === mine) {
-      // 这一档现成的项目都做完了（可能只剩按「想做的事」现做的那张）
-      status('这一档现成的项目你都做完了！' + (mine
-        ? '可以做下面这张按你写的事现做的，或者看看小一点的。'
-        : '可以看看下面小一点的，或者在问题 2 写下你想做的事，我们帮你把它变成一个项目。'), 'ok');
+      status('You’ve finished every ready-made project in this band. ' + (mine
+        ? 'You can do the card built from what you wrote, or look at a smaller one.'
+        : 'Look at a smaller one below, or write what you want in question 2.'), 'ok');
     } else if (rec.fallback) {
-      status('你填的偏好在这一档暂时没有对得上的现成项目，先把这一档的都列出来。', 'warn');
+      status('Nothing in this band matches what you picked, so here is the whole band.', 'warn');
     }
     const top = rec.personalized && !rec.fallback;
     rec.cards.forEach((p, i) => list.appendChild(card(p, top && i === 0)));
@@ -551,7 +536,7 @@
     $('restore-note').hidden = true;
     renderResults();
     renderRecs();
-    $('clear-msg').textContent = '已经全部清掉了：问卷回答、第 1 步的数字、做完的记录。';
+    $('clear-msg').textContent = 'Cleared quiz answers, step 1 numbers, and finished projects.';
     $('clear-msg').hidden = false;
   }
 

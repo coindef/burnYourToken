@@ -94,14 +94,14 @@
   test('卡在 5 小时额度、它 1 小时内重置 → 档位照算，另外提醒重置后再算（可能变大）', () => {
     const r = calc({ sessionPct: '70', weeklyPct: '10', sessionH: '0', sessionM: '20' }); // 剩 30% / 90%
     eq(r.band, 'medium', '照规格还是中');
-    ok(r.notes.some(n => n.indexOf('20 分钟就重置') !== -1 && n.indexOf('可能就是大档') !== -1), '有提醒：' + r.notes.join(' / '));
+    ok(r.notes.some(n => n.indexOf('resets in 20 min') !== -1 && n.indexOf('could be Large') !== -1), '有提醒：' + r.notes.join(' / '));
     const far = calc({ sessionPct: '70', weeklyPct: '10', sessionH: '2', sessionM: '0' });
-    ok(!far.notes.some(n => n.indexOf('可能就是') !== -1), '还有 2 小时才重置 → 不提醒');
+    ok(!far.notes.some(n => n.indexOf('could be') !== -1), '还有 2 小时才重置 → 不提醒');
     const weeklyNeck = calc({ sessionPct: '10', weeklyPct: '70', sessionH: '0', sessionM: '20' });
-    ok(!weeklyNeck.notes.some(n => n.indexOf('可能就是') !== -1), '卡在每周额度 → 不提醒');
+    ok(!weeklyNeck.notes.some(n => n.indexOf('could be') !== -1), '卡在每周额度 → 不提醒');
     const capped = calc({ sessionPct: '70', weeklyPct: '10', sessionH: '0', sessionM: '20', weeklyDay: '1', weeklyClock: '12:00' });
     eq(capped.band, 'small', '离每周重置 2 小时 → 小');
-    ok(!capped.notes.some(n => n.indexOf('可能就是') !== -1), '重置 5 小时额度也变不大 → 不提醒');
+    ok(!capped.notes.some(n => n.indexOf('could be') !== -1), '重置 5 小时额度也变不大 → 不提醒');
   });
 
   test('有效剩余 40% → 中档', () => {
@@ -163,7 +163,7 @@
     ok(r.ok, '应该算得出来');
     eq(r.sessionHours, 5, '5 小时');
     eq(r.band, 'large', '档位');
-    ok(r.notes.some(n => n.indexOf('还没开始用') !== -1), '有说明');
+    ok(r.notes.some(n => n.indexOf("hasn't started") !== -1), '有说明');
   });
 
   test('用了一部分却没填重置时间 → 提示要填', () => {
@@ -175,15 +175,15 @@
   test('空着和填错分开说，并写明是第几个数', () => {
     const blank = calc({ sessionPct: '', weeklyPct: '', sessionH: '', sessionM: '', weeklyDay: '' });
     const msgs = blank.errors.map(e => e.msg).join('\n');
-    ok(msgs.indexOf('①') !== -1 && msgs.indexOf('还空着') !== -1, msgs);
-    ok(msgs.indexOf('③') !== -1 && msgs.indexOf('周几还没选') !== -1, msgs);
-    ok(msgs.indexOf('不是 0 到 100') === -1, '空着不当成填错：' + msgs);
-    const bad = calc({ sessionPct: '150', weeklyPct: 'nope' });
+    ok(msgs.indexOf('Session % is empty.') !== -1, msgs);
+    ok(msgs.indexOf('Weekly % is empty.') !== -1 && msgs.indexOf('Weekday is empty.') !== -1, msgs);
+    ok(msgs.indexOf('must be 0–100') === -1, 'empty is not out of range: ' + msgs);
+    const bad = calc({ sessionPct: '150', weeklyPct: 'nope', weeklyDay: '4' });
     const badMsgs = bad.errors.map(e => e.msg).join('\n');
-    ok(badMsgs.indexOf('①') !== -1 && badMsgs.indexOf('③') !== -1 && badMsgs.indexOf('不是 0 到 100') !== -1, badMsgs);
-    ok(badMsgs.indexOf('还空着') === -1, badMsgs);
+    ok(badMsgs.indexOf('Session % must be 0–100.') !== -1 && badMsgs.indexOf('Weekly % must be 0–100.') !== -1, badMsgs);
+    ok(badMsgs.indexOf('is empty') === -1, badMsgs);
     const noReset = calc({ sessionPct: '40', sessionH: '', sessionM: '' });
-    ok(noReset.errors.some(e => e.field === 'sessionCountdown' && e.msg.indexOf('②') !== -1 && e.msg.indexOf('还空着') !== -1), noReset.errors.map(e => e.msg).join(' / '));
+    ok(noReset.errors.some(e => e.field === 'sessionCountdown' && e.msg === 'Resets in is empty.'), noReset.errors.map(e => e.msg).join(' / '));
   });
 
   test('百分比不合法会报错；带 % 号和小数可以', () => {
@@ -214,17 +214,30 @@
   });
 
   test('已经到点时，不写「还有 马上就到」这种话', () => {
-    eq(C.formatUntil(0), '马上就要重置了');
-    eq(C.formatUntil(3), '还有 3 小时');
+    eq(C.formatUntil(0), 'resets any moment');
+    eq(C.formatUntil(3), 'in 3 hr');
     const r = calc({ sessionPct: '100', weeklyPct: '50', sessionH: '0', sessionM: '0' });
     eq(r.band, 'none');
-    eq(C.formatUntil(r.waitFor.hours), '马上就要重置了');
+    eq(C.formatUntil(r.waitFor.hours), 'resets any moment');
   });
 
   test('按 API 用量付钱 → 不适用', () => {
     const r = calc({ plan: 'api' });
     eq(r.ok, false);
     eq(r.notApplicable, true);
+    eq(r.errors[0].msg, 'API billing has no session/weekly window — this tool doesn’t apply.');
+  });
+
+  test('short errors: empty vs out of range, same pattern for weekly, weekday, resets in', () => {
+    const msg = (over, field) => (calc(over).errors.find(e => e.field === field) || {}).msg;
+    eq(msg({ sessionPct: '' }, 'sessionPct'), 'Session % is empty.');
+    eq(msg({ sessionPct: '120' }, 'sessionPct'), 'Session % must be 0–100.');
+    eq(msg({ weeklyPct: '' }, 'weeklyPct'), 'Weekly % is empty.');
+    eq(msg({ weeklyPct: 'nope' }, 'weeklyPct'), 'Weekly % must be 0–100.');
+    eq(msg({ weeklyDay: '' }, 'weeklyDay'), 'Weekday is empty.');
+    eq(msg({ sessionPct: '40', sessionH: '', sessionM: '' }, 'sessionCountdown'), 'Resets in is empty.');
+    eq(msg({ sessionH: '1', sessionM: '75' }, 'sessionCountdown'), 'Resets in must be hours and minutes.');
+    eq(msg({ sessionResetType: 'clock', sessionClock: 'abc', sessionPct: '40' }, 'sessionClock'), 'Resets in must be a clock time.');
   });
 
   test('填钟点：5 小时额度 10:30 重置（半小时后）→ 算对时间，档位不受影响；09:00 → 算明天，并提醒可能抄错', () => {
@@ -235,7 +248,7 @@
     eq(w.band, 'small', '每周额度 10:30 重置 → 小档');
     const b = calc({ sessionResetType: 'clock', sessionClock: '09:00', sessionPct: '10', weeklyPct: '10' });
     ok(near(b.sessionHours, 23), '23 小时');
-    ok(b.notes.some(n => n.indexOf('超过了 5 小时') !== -1), '有提醒');
+    ok(b.notes.some(n => n.indexOf('more than 5 hours') !== -1), '有提醒');
   });
 
   test('每周重置时间：已过的今天 → 下周；今天没填几点 → 按马上重置；别的天没填几点 → 那天 0 点', () => {
@@ -252,16 +265,16 @@
     ok(near(sun.hours, 154), '周日 20:00 → 154 小时');
     const r = calc({ sessionPct: '10', weeklyPct: '10', weeklyDay: '1', weeklyClock: '' });
     eq(r.band, 'small', '今天重置但没填几点 → 小档');
-    ok(r.notes.some(n => n.indexOf('今天重置') !== -1), '有说明');
+    ok(r.notes.some(n => n.indexOf('resets today') !== -1), '有说明');
   });
 
   test('时长显示', () => {
-    eq(C.formatHours(0), '马上就到');
-    eq(C.formatHours(0.5), '30 分钟');
-    eq(C.formatHours(3), '3 小时');
-    eq(C.formatHours(3.25), '3 小时 15 分钟');
-    eq(C.formatHours(48), '2 天');
-    eq(C.formatHours(70), '2 天 22 小时');
+    eq(C.formatHours(0), 'any moment');
+    eq(C.formatHours(0.5), '30 min');
+    eq(C.formatHours(3), '3 hr');
+    eq(C.formatHours(3.25), '3 hr 15 min');
+    eq(C.formatHours(48), '2 days');
+    eq(C.formatHours(70), '2 days 22 hr');
   });
 
   test('两个服务各算各的：同一时刻两份输入，结果互不影响', () => {
@@ -317,11 +330,11 @@
 
   test('研究、摘要类只占一小块；学习类也不是大头（不只给学生）', () => {
     const P = QP.PROJECTS;
-    const researchy = P.filter(p => /研究|报告|摘要|总结|看懂|比较|调研/.test(p.title));
+    const researchy = P.filter(p => /make sense of|compare three/i.test(p.title));
     ok(researchy.length <= 3 && researchy.length / P.length <= 0.2, '研究/摘要类 ' + researchy.length + ' 个');
     const study = P.filter(p => p.domain === 'study');
     ok(study.length / P.length <= 0.25, '学习类 ' + study.length + ' 个');
-    const studentOnly = P.filter(p => /学生|论文|课堂|老师布置/.test(p.title + p.output));
+    const studentOnly = P.filter(p => /students only|term paper|classroom/i.test(p.title + p.output));
     eq(studentOnly.length, 0, '只适合学生的项目');
   });
 
@@ -408,9 +421,9 @@
     ok(r.cards.every(p => p.why.score > 0), '主推荐都对上了');
     ok(r.others.length > 0 && r.others.every(p => p.why.score === 0 && p.band === 'medium'), '其他同档');
     eq(r.cards.length + r.others.length, QP.PROJECTS.filter(p => p.band === 'medium').length, '同档一个不少');
-    ok(r.cards[0].why.matches.some(t => t.indexOf('旅行') !== -1), '理由里写了领域');
-    ok(r.cards[0].why.matches.some(t => t.indexOf('一份计划或方案') !== -1), '理由里写了成果');
-    ok(r.cards[0].why.matches.some(t => t.indexOf('给家人、朋友或孩子') !== -1), '理由里写了给谁');
+    ok(r.cards[0].why.matches.some(t => t.indexOf('Travel') !== -1), '理由里写了领域');
+    ok(r.cards[0].why.matches.some(t => t.indexOf('A plan') !== -1), '理由里写了成果');
+    ok(r.cards[0].why.matches.some(t => t.indexOf('Family, friends, or kids') !== -1), '理由里写了给谁');
   });
 
   test('偏好不同，排序跟着变（同一个档位）', () => {
@@ -439,17 +452,17 @@
       eq(r.cards.map(p => p.id).join(), QP.PROJECTS.filter(p => p.band === band).map(p => p.id).join(), band + ' 全列、库顺序');
       r.cards.forEach(p => {
         eq(p.why.matches.length, 0, p.id + ' 没有对上的偏好');
-        ok(p.why.summary.indexOf('只按档位') !== -1, p.id + ' 写明按档位挑');
-        ok(p.why.band.indexOf('不会超出你的剩余') !== -1, p.id + ' 写明不超档');
+        ok(p.why.summary.indexOf('by band') !== -1, p.id + ' 写明按档位挑');
+        ok(p.why.band.indexOf('Fits your') !== -1, p.id + ' 写明档位');
       });
     });
   });
 
   test('档位理由：同档写「刚好用得上」，小一点的写「比你的剩余小」', () => {
     const r = C.recommend({ band: 'large' });
-    ok(r.cards[0].why.band.indexOf('你现在剩的是大档') !== -1 && r.cards[0].why.band.indexOf('刚好用得上') !== -1, r.cards[0].why.band);
+    ok(r.cards[0].why.band.indexOf('Fits your Large band.') !== -1, r.cards[0].why.band);
     const s = r.smaller.find(p => p.band === 'small');
-    ok(s.why.band.indexOf('这个是小档') !== -1 && s.why.band.indexOf('比你的剩余小') !== -1, s.why.band);
+    ok(s.why.band.indexOf("Smaller than what's left (Small).") !== -1, s.why.band);
   });
 
   test('坏数据：问卷里不认识的选项 id 一律忽略，不算填了偏好', () => {
@@ -517,14 +530,14 @@
     eq(b.cards.length, QP.PROJECTS.filter(p => p.band === 'small').length, '列出这一档全部');
   });
 
-  test('自定义卡：结尾标点不会重复，本来就以「我想 / 想」开头的不再加「我想做」', () => {
-    const a = C.customProject('我想去旅游。', 'small');
-    ok(a.steps[0].indexOf('「我想去旅游。请先问我') !== -1, a.steps[0]);
-    const b = C.customProject('想学游泳！！', 'medium');
-    ok(b.steps[0].indexOf('「我想学游泳。请先问我') !== -1, b.steps[0]);
-    const c = C.customProject('整理衣柜', 'large');
-    ok(c.steps[0].indexOf('「我想做：整理衣柜。') !== -1, c.steps[0]);
-    eq(c.id, 'custom:整理衣柜', 'id 用原话');
+  test('custom card: trailing punctuation is not doubled; “I want” / “Want” is not prefixed again', () => {
+    const a = C.customProject('I want to travel.', 'small');
+    ok(a.steps[0].indexOf('I want to travel. Ask me') !== -1, a.steps[0]);
+    const b = C.customProject('Want to learn to swim!!', 'medium');
+    ok(b.steps[0].indexOf('I want to learn to swim. Ask me') !== -1, b.steps[0]);
+    const c = C.customProject('organize the closet', 'large');
+    ok(c.steps[0].indexOf('I want to: organize the closet. Ask me') !== -1, c.steps[0]);
+    eq(c.id, 'custom:organize the closet', 'id uses the original words');
   });
 
   test('常见的「想做的事」→ 排第一的卡说得通（中档）', () => {

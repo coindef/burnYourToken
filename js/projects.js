@@ -1,414 +1,430 @@
 /*
- * 首批项目库（v0）
- * 7 个生活领域 × 小/中/大 三档，每格至少 1 个项目，共 25 个。
- * 每个项目四个字段：档位 band、目标产出 output、大概步骤 steps、验收标准 done。
- * 偏好标签：outputs（做完是什么样的成果）、audience（给谁做的），对应问卷第 3、4 题。
- * words / keywords 只用来和用户写的字做简单的字面匹配，不做别的。
- * 研究、摘要类只占一小块（life-document、life-compare）。
+ * First project catalog (v0).
+ * 7 everyday areas × small / medium / large, at least one project per cell, 25 total.
+ * Each project: band, output, steps, done.
+ * Preference tags: outputs (what you hold at the end), audience (who it's for).
+ * words / keywords are literal matches against what the user typed, in English or Chinese.
+ * Research-style projects stay a small slice (life-document, life-compare).
  */
 (function () {
   'use strict';
   const QP = window.QP = window.QP || {};
 
-  // 领域：words 用来从「其他」和「最近想做的事」里认出领域
   QP.DOMAINS = [
-    { id: 'work', label: '工作',
-      words: ['工作', '上班', '职场', '同事', '老板', '领导', '求职', '面试', '简历', '副业', '客户'] },
-    { id: 'study', label: '学习',
-      words: ['学习', '想学', '学会', '考试', '考证', '课程', '复习', '外语', '英语'] },
-    { id: 'hobby', label: '爱好',
-      words: ['爱好', '兴趣', '游戏', '桌游', '追剧', '电影', '音乐', '乐器', '吉他', '钢琴', '摄影', '手工', '钓鱼'] },
-    { id: 'life', label: '生活',
-      words: ['生活', '家务', '做饭', '买菜', '省钱', '存钱', '花钱', '账单', '合同', '租房', '房东', '房租', '搬家', '理财', '装修'] },
-    { id: 'create', label: '创作',
-      words: ['创作', '写作', '写东西', '故事', '写诗', '画画', '设计', '视频', '文案', '写歌', '小说', '公众号', '小红书', '照片', '相册'] },
-    { id: 'health', label: '健康',
-      words: ['健康', '运动', '锻炼', '减肥', '睡眠', '失眠', '饮食', '看病', '医生', '身体', '健身', '体检'] },
-    { id: 'travel', label: '旅行',
-      words: ['旅行', '旅游', '出行', '度假', '出差', '行程', '机票', '酒店', '出去玩', '一日游', '自驾'] }
+    { id: 'work', label: 'Work',
+      words: ['工作', '上班', '职场', '同事', '老板', '领导', '求职', '面试', '简历', '副业', '客户',
+        'at work', 'my job', 'coworker', 'boss', 'resume', 'client', 'salary', 'interview'] },
+    { id: 'study', label: 'Learning',
+      words: ['学习', '想学', '学会', '考试', '考证', '课程', '复习', '外语', '英语',
+        'learn', 'learning', 'study', 'exam', 'course', 'language'] },
+    { id: 'hobby', label: 'Hobbies',
+      words: ['爱好', '兴趣', '游戏', '桌游', '追剧', '电影', '音乐', '乐器', '吉他', '钢琴', '摄影', '手工', '钓鱼',
+        'hobby', 'movie', 'music', 'guitar', 'piano', 'photo', 'craft', 'game night'] },
+    { id: 'life', label: 'Everyday life',
+      words: ['生活', '家务', '做饭', '买菜', '省钱', '存钱', '花钱', '账单', '合同', '租房', '房东', '房租', '搬家', '理财', '装修',
+        'chores', 'cooking', 'groceries', 'save money', 'bill', 'lease', 'rent', 'moving', 'budget'] },
+    { id: 'create', label: 'Creating',
+      words: ['创作', '写作', '写东西', '故事', '写诗', '画画', '设计', '视频', '文案', '写歌', '小说', '公众号', '小红书', '照片', '相册',
+        'writing', 'story', 'poem', 'drawing', 'design', 'novel', 'social post', 'photo album'] },
+    { id: 'health', label: 'Health',
+      words: ['健康', '运动', '锻炼', '减肥', '睡眠', '失眠', '饮食', '看病', '医生', '身体', '健身', '体检',
+        'health', 'exercise', 'workout', 'sleep', 'diet', 'doctor', 'fitness'] },
+    { id: 'travel', label: 'Travel',
+      words: ['旅行', '旅游', '出行', '度假', '出差', '行程', '机票', '酒店', '出去玩', '一日游', '自驾',
+        'travel', 'trip', 'vacation', 'flight', 'hotel', 'itinerary'] }
   ];
 
-  // 问卷第 3 题：这次想要什么样的成果
   QP.OUTPUTS = [
-    { id: 'text', label: '能直接用的一段文字', hint: '消息、帖子、故事、贺卡' },
-    { id: 'list', label: '一张表或一份清单', hint: '对比表、购物单、打包单' },
-    { id: 'plan', label: '一份计划或方案', hint: '学习计划、行程、聚会安排' },
-    { id: 'learn', label: '弄懂或练熟一件事', hint: '搞懂一个概念、练面试、备考' },
-    { id: 'fun', label: '好玩的、能送人的', hint: '小游戏、纪念册、给人的祝福' }
+    { id: 'text', label: 'Writing you can use', hint: 'a message, a post, a story, a card' },
+    { id: 'list', label: 'A table or a list', hint: 'a comparison, a shopping list, a packing list' },
+    { id: 'plan', label: 'A plan', hint: 'a study plan, a trip, a get-together' },
+    { id: 'learn', label: 'Understand or practice one thing', hint: 'a concept, interview practice, exam prep' },
+    { id: 'fun', label: 'Something fun to give or play', hint: 'a small game, a memory book, a note for someone' }
   ];
 
-  // 问卷第 4 题：这次是给谁做的
   QP.AUDIENCES = [
-    { id: 'self', label: '给我自己' },
-    { id: 'family', label: '给家人、朋友或孩子' },
-    { id: 'work', label: '工作上要用' }
+    { id: 'self', label: 'Myself' },
+    { id: 'family', label: 'Family, friends, or kids' },
+    { id: 'work', label: 'For work' }
   ];
 
   QP.PROJECTS = [
-    // ---------- 工作 ----------
     {
       id: 'work-message', domain: 'work', band: 'small',
       outputs: ['text'], audience: ['work'],
-      title: '把一条难开口的工作消息写好',
-      output: '一条可以直接发出去的工作消息（邮件或聊天都行），比如催进度、拒绝加活、请假、谈加薪。',
+      title: 'Write a work message you’ve been putting off',
+      output: 'A message you can send (email or chat): a nudge, a no, time off, or a pay conversation.',
       steps: [
-        '在聊天框里写：「帮我写一条消息给（谁），我想说（什么），我担心（什么）。」',
-        '让它写两个版本：一个直接一点，一个客气一点。',
-        '挑一个，让它改成你平时说话的口气，把你不会说的话删掉。'
+        'Tell the AI: “Help me write a message to (who). I want to say (what). I worry about (what).”',
+        'Ask for two versions: one direct, one polite.',
+        'Pick one, make it sound like you, and delete anything you wouldn’t say.'
       ],
-      done: '一条改好的消息，复制过去就能发。',
-      keywords: ['邮件', '消息', '回复', '请假', '催', '拒绝', '加薪', '涨薪', '老板', '同事', '客户', '沟通']
+      done: 'One message you can copy and send.',
+      keywords: ['邮件', '消息', '回复', '请假', '催', '拒绝', '加薪', '涨薪', '老板', '同事', '客户', '沟通',
+        'email', 'message', 'time off', 'raise', 'boss', 'coworker', 'client']
     },
     {
       id: 'work-checklist', domain: 'work', band: 'medium',
       outputs: ['list'], audience: ['work'],
-      title: '把一件每周都要做的事，写成照着做的清单',
-      output: '一份某件重复工作的步骤清单，比如月底对账、写周报、给新同事交代工作。',
+      title: 'Turn a weekly chore into a checklist',
+      output: 'A step-by-step list for something you repeat: a month-end check, a status note, or handing work to someone new.',
       steps: [
-        '跟 AI 说：「我每周都要做（某件事），请一步一步问我是怎么做的。」',
-        '老老实实回答它的问题，包括容易忘、容易出错的地方。',
-        '让它整理成编号清单，每一步写清楚要用什么、做到什么样算好。',
-        '对照上一次实际做的情况过一遍，把漏掉的补上，让它出最终版。'
+        'Tell the AI: “I do (this) every week. Ask me how I do it, one step at a time.”',
+        'Answer, including the parts you forget or mess up.',
+        'Ask for a numbered list. Each step says what you need and what “done” looks like.',
+        'Walk the list against last time, add what was missing, and ask for a final version.'
       ],
-      done: '一页清单：你下次照着做不会漏步骤，交给同事也能看懂。',
-      keywords: ['清单', '流程', '交接', '周报', '重复', '新人', '对账', '报表', '步骤']
+      done: 'One page you can follow next time, and that a coworker can follow too.',
+      keywords: ['清单', '流程', '交接', '周报', '重复', '新人', '对账', '报表', '步骤',
+        'checklist', 'handoff', 'weekly update', 'steps']
     },
     {
       id: 'work-interview', domain: 'work', band: 'medium',
       outputs: ['learn'], audience: ['self'],
-      title: '面试前，让 AI 当面试官陪你练一轮',
-      output: '一份面试问答笔记：5 道最可能被问到的题，每道题有你自己的回答要点。',
+      title: 'Practice a job interview out loud',
+      output: 'Notes from a practice round: 5 likely questions, each with your own answer points.',
       steps: [
-        '告诉 AI 你要面试什么职位、你过去做过什么（把职位介绍贴进去更好）。',
-        '让它扮演面试官，一次只问一道题，你像真面试一样回答。',
-        '每答完一道，让它说哪里好、哪里可以更具体，帮你改成回答要点。',
-        '最后让它问一道你最怕的题，再练一遍。'
+        'Tell the AI the role and what you’ve done (paste the job post if you have it).',
+        'Have it play interviewer and ask one question at a time. Answer as if it’s real.',
+        'After each answer, ask what was solid and what should be more specific.',
+        'Finish with the question you dread, and practice it once more.'
       ],
-      done: '一页 5 道题的回答要点，面试前看一眼就能进状态。',
-      keywords: ['面试', '应聘', '求职', '找工作', '自我介绍', '复试', '跳槽']
+      done: 'One page of 5 answer points you can reread before the interview.',
+      keywords: ['面试', '应聘', '求职', '找工作', '自我介绍', '复试', '跳槽',
+        'interview', 'job hunt', 'hiring']
     },
     {
       id: 'work-job', domain: 'work', band: 'large',
       outputs: ['text', 'learn'], audience: ['self', 'work'],
-      title: '为一个想投的职位，改好简历再练一轮面试',
-      output: '一份针对这个职位改过的简历，加一份模拟面试的问答笔记。',
+      title: 'Rewrite a resume for one role, then practice the interview',
+      output: 'A resume edited for this role, plus notes from a practice interview.',
       steps: [
-        '把旧简历和职位介绍贴给 AI（先把电话、身份证号、住址这些删掉）。',
-        '让它指出简历和职位对不上的地方，一段一段改。',
-        '让它扮演面试官，一次问一道题，问 8–10 道，你认真回答。',
-        '每道题让它点评你的回答，帮你整理成回答要点。',
-        '最后通读简历，确认每一句都是真的、你都说得出口。'
+        'Paste the old resume and the job post. Remove phone numbers, ID numbers, and your home address first.',
+        'Ask where the resume misses the role, and edit one section at a time.',
+        'Have it play interviewer for 8–10 questions. Answer them seriously.',
+        'After each one, ask for notes and turn them into answer points.',
+        'Read the resume once more. Every line should be true and sayable.'
       ],
-      done: '改好的简历文字 + 8–10 道题的回答要点，面试前翻一遍就能用。',
-      keywords: ['简历', '面试', '求职', '找工作', '跳槽', '换工作', '职位', '应聘', 'offer']
+      done: 'Resume text plus 8–10 answer points you can review before the interview.',
+      keywords: ['简历', '面试', '求职', '找工作', '跳槽', '换工作', '职位', '应聘', 'offer',
+        'resume', 'job', 'offer', 'career']
     },
-
-    // ---------- 学习 ----------
     {
       id: 'study-concept', domain: 'study', band: 'small',
       outputs: ['learn'], audience: ['self', 'family'],
-      title: '把一个一直没弄懂的东西彻底搞懂',
-      output: '一段你用自己的话写下的解释，加一个生活里的例子。可以是任何东西：复利、通货膨胀、新闻里的一个词、孩子作业里的一道题。',
+      title: 'Get clear on one idea you never quite got',
+      output: 'A short explanation in your own words, plus one everyday example. Compound interest, a news term, a homework problem — anything.',
       steps: [
-        '跟 AI 说：「请用大白话、用生活里的例子给我讲讲（某个东西），别用专业词。」',
-        '哪里没听懂就直接问「这句是什么意思」。',
-        '让它出 3 道小题考你。',
-        '你用自己的话讲一遍，让它挑错。'
+        'Tell the AI: “Explain (this) in plain language, with an everyday example. Skip the jargon.”',
+        'Ask “what does that sentence mean?” wherever you stall.',
+        'Ask for 3 small questions to check you.',
+        'Explain it back in your own words and ask it to catch mistakes.'
       ],
-      done: '一段你自己写的、AI 确认没讲错的解释，下次能讲给别人听。',
-      keywords: ['搞懂', '弄懂', '没懂', '概念', '解释', '什么意思', '作业', '原理', '复利', '通胀']
+      done: 'A short explanation you wrote, checked, and could tell someone else.',
+      keywords: ['搞懂', '弄懂', '没懂', '概念', '解释', '什么意思', '作业', '原理', '复利', '通胀',
+        'explain', 'concept', 'what does', 'homework']
     },
     {
       id: 'study-plan', domain: 'study', band: 'medium',
       outputs: ['plan', 'learn'], audience: ['self'],
-      title: '给一个想学的本事，做一份 4 周入门计划',
-      output: '一份 4 周计划：每周一个目标，每天 15–30 分钟能做完的练习。学什么都行：做表格、学外语、学拍照、学点理财常识。',
+      title: 'Make a 4-week plan to learn a skill',
+      output: 'A 4-week plan: one goal each week, and a 15–30 minute practice for each day. Spreadsheets, a language, photos, cooking — anything.',
       steps: [
-        '告诉 AI 你想学什么、现在什么水平、每天能挤出多少时间。',
-        '让它排出 4 周计划，每周写清楚「这周结束时我能做到什么」。',
-        '一条一条看，太难的让它改简单，不想做的换掉。',
-        '照着第一天的安排，当场跟它把第一天的练习做完。'
+        'Say what you want to learn, your level now, and how many minutes you can spare.',
+        'Ask for 4 weeks. Each week says what you can do by the end of it.',
+        'Read each line. Make the hard ones easier, and swap anything you won’t do.',
+        'Do day 1 with the AI before you close the tab.'
       ],
-      done: '一张 4 周计划表（可以截图或打印），而且第一天已经练完了。',
-      keywords: ['想学', '学会', '学做', '入门', '外语', '英语', '日语', 'excel', '表格', '技能', '自学', '课程', '吉他', '钢琴', '乐器', '游泳', '厨艺', '编程']
+      done: 'A 4-week plan you can screenshot or print, with day 1 already done.',
+      keywords: ['想学', '学会', '学做', '入门', '外语', '英语', '日语', 'excel', '表格', '技能', '自学', '课程', '吉他', '钢琴', '乐器', '游泳', '厨艺', '编程',
+        'learn', 'guitar', 'piano', 'language', 'spreadsheet', 'skill', 'cook']
     },
     {
       id: 'study-flashcards', domain: 'study', band: 'large',
       outputs: ['learn', 'list'], audience: ['self'],
-      title: '为一场考试或一堆要记的东西，做一套问答卡片并模拟考一次',
-      output: '一套 40–60 张的问答卡片，加一次模拟测验和错题讲解。适合考驾照、考证、背单词、准备入职培训的考试。',
+      title: 'Build a quiz deck and take a practice test',
+      output: '40–60 question cards, one practice quiz, and notes on what you missed. A license test, a cert, vocabulary, onboarding — anything you have to remember.',
       steps: [
-        '告诉 AI 要考、要记的范围，可以把目录或笔记贴进去。',
-        '让它分几批出问答卡片，每批 10–15 张，你边看边删掉用不上的。',
-        '让它从卡片里出一套 20 道题的模拟测验，你自己作答。',
-        '把答案发给它批改，错的题让它换个说法再讲一遍。',
-        '把卡片和错题讲解整理成一份，存进备忘录或打印出来。'
+        'Say what the test or the list covers. Paste a table of contents or notes if you have them.',
+        'Ask for cards in batches of 10–15. Delete the ones you don’t need.',
+        'Ask for a 20-question quiz from the cards and answer it yourself.',
+        'Send your answers back. For the ones you miss, ask for another explanation.',
+        'Save the cards and the miss notes somewhere you can reuse.'
       ],
-      done: '一份能反复用的卡片清单 + 一份错题讲解，知道自己哪里还不会。',
-      keywords: ['考试', '考证', '驾照', '背单词', '单词', '复习', '备考', '卡片', '测验', '记住']
+      done: 'A card list you can reuse, plus notes on what you still don’t know.',
+      keywords: ['考试', '考证', '驾照', '背单词', '单词', '复习', '备考', '卡片', '测验', '记住',
+        'exam', 'flashcard', 'vocabulary', 'quiz', 'license']
     },
-
-    // ---------- 爱好 ----------
     {
       id: 'hobby-picks', domain: 'hobby', band: 'small',
       outputs: ['list', 'fun'], audience: ['self'],
-      title: '按你的口味，挑出接下来要看、要玩的 5 样东西',
-      output: '一份 5 项的清单：书、剧、电影、游戏、播客都行，每项写着为什么适合你。',
+      title: 'Pick the next 5 things to watch or play',
+      output: 'A list of 5: books, shows, films, games, or podcasts, each with why it fits you.',
       steps: [
-        '告诉 AI 你最喜欢的 3 部作品，以及你喜欢它们哪一点。',
-        '再说说你最近没兴趣的类型，让它避开。',
-        '让它推荐 8 个并说明理由，你从里面挑 5 个。',
-        'AI 说的上线时间、在哪能看、价格可能不准，看之前自己查一下。'
+        'Name 3 things you love and what you love about them.',
+        'Name what you’re bored of, and tell it to skip those.',
+        'Ask for 8 suggestions with reasons. Keep 5.',
+        'Release dates, where to watch, and prices may be stale. Check before you start.'
       ],
-      done: '一份写着理由的 5 项清单，这个月不用再纠结看什么、玩什么。',
-      keywords: ['看什么', '玩什么', '看书', '读书', '电影', '电视剧', '追剧', '游戏', '播客', '动漫', '小说', '综艺']
+      done: 'A list of 5, with reasons, so you can stop deciding for a while.',
+      keywords: ['看什么', '玩什么', '看书', '读书', '电影', '电视剧', '追剧', '游戏', '播客', '动漫', '小说', '综艺',
+        'what to watch', 'movie', 'show', 'game', 'podcast', 'book']
     },
     {
       id: 'hobby-party', domain: 'hobby', band: 'medium',
       outputs: ['plan', 'fun'], audience: ['family'],
-      title: '策划一次朋友来家里的游戏之夜',
-      output: '一份聚会方案：从开场到散场的时间表、2–3 个游戏的简单玩法、吃喝和采购清单。',
+      title: 'Plan a game night at home',
+      output: 'A plan: a timeline, 2–3 games with short rules, and a food and shopping list.',
       steps: [
-        '告诉 AI 有几个人、多大年纪、玩多久、预算多少、大家熟不熟。',
-        '让它推荐几个不用买道具、或者道具很简单的游戏，挑 2–3 个。',
-        '让它把每个游戏的玩法写成一段话，第一次玩的人也能听懂。',
-        '排一个从开场到散场的时间表，再列出要买的东西。'
+        'Say how many people, their ages, how long, the budget, and whether everyone knows each other.',
+        'Ask for games that need little or no gear. Pick 2–3.',
+        'Have the rules written so someone playing for the first time can follow.',
+        'Make a start-to-end timeline and a shopping list.'
       ],
-      done: '一页聚会方案：几点做什么、玩什么、怎么玩、要买什么，都写清楚了。',
-      keywords: ['聚会', '朋友', '派对', '游戏之夜', '桌游', '剧本杀', '生日', '狼人杀', '团建']
+      done: 'One page: when, what you play, how, and what to buy.',
+      keywords: ['聚会', '朋友', '派对', '游戏之夜', '桌游', '剧本杀', '生日', '狼人杀', '团建',
+        'party', 'game night', 'friends', 'birthday']
     },
     {
       id: 'hobby-game', domain: 'hobby', band: 'large',
       outputs: ['fun'], audience: ['family'],
-      title: '自己设计一个能和朋友、家人玩的小游戏',
-      output: '一个能打印出来玩的小游戏：一页规则说明，加上所有卡片或题目的文字。可以是桌游、解谜、寻宝游戏、家庭问答。',
+      title: 'Design a small game to play with people you know',
+      output: 'A printable game: one page of rules, plus the text for every card or prompt. A board game, a puzzle, a scavenger hunt, or a family quiz.',
       steps: [
-        '定下主题、几个人玩、玩多久、给谁玩（朋友、孩子、家人）。',
-        '让 AI 出 3 种玩法，你挑一种。',
-        '一起写规则，再写出所有卡片或题目的文字。',
-        '让 AI 假装 3 个玩家，照着规则模拟玩一局，找出规则里的漏洞。',
-        '修好漏洞，整理成最终版。'
+        'Pick a theme, how many players, how long, and who it’s for.',
+        'Ask for 3 ways to play. Choose one.',
+        'Write the rules together, then the text for every card or prompt.',
+        'Have the AI pretend to be 3 players and play once, looking for holes in the rules.',
+        'Fix the holes and save the final version.'
       ],
-      done: '一页规则 + 全部卡片或题目的文字，打印剪开就能玩。',
-      keywords: ['桌游', '游戏', '解谜', '谜题', '寻宝', '问答', '孩子', '家庭游戏']
+      done: 'One page of rules plus every card or prompt, ready to print and cut.',
+      keywords: ['桌游', '游戏', '解谜', '谜题', '寻宝', '问答', '孩子', '家庭游戏',
+        'board game', 'puzzle', 'scavenger', 'family game']
     },
-
-    // ---------- 生活 ----------
     {
       id: 'life-meals', domain: 'life', band: 'small',
       outputs: ['list', 'plan'], audience: ['self', 'family'],
-      title: '用冰箱里现有的东西，安排好接下来三顿饭',
-      output: '三顿饭的菜单和做法，加一张只写缺什么的购物清单。',
+      title: 'Plan the next three meals from what you have',
+      output: 'Three meals with short methods, plus a shopping list of only what’s missing.',
       steps: [
-        '把冰箱和厨房里有的东西列给 AI，说清楚几个人吃、有什么不吃的。',
-        '让它出三顿饭的搭配，每道菜的做法写成 5 步以内。',
-        '让它列出还缺的东西，越少越好。'
+        'List what’s in the kitchen, how many people, and what anyone won’t eat.',
+        'Ask for three meals. Each method should be 5 steps or fewer.',
+        'Ask for the missing items only, as few as possible.'
       ],
-      done: '一份能照着做的三顿饭菜单 + 一张很短的购物清单。',
-      keywords: ['做饭', '做菜', '吃什么', '冰箱', '菜谱', '食谱', '买菜', '晚饭', '午饭', '早餐', '带饭']
+      done: 'Three meals you can cook, plus a short shopping list.',
+      keywords: ['做饭', '做菜', '吃什么', '冰箱', '菜谱', '食谱', '买菜', '晚饭', '午饭', '早餐', '带饭',
+        'dinner', 'recipe', 'groceries', 'lunch', 'breakfast']
     },
     {
       id: 'life-document', domain: 'life', band: 'medium',
       outputs: ['learn', 'list'], audience: ['self'],
-      title: '看懂一份让你头疼的文件',
-      output: '一页大白话笔记：这份文件讲了什么、你要注意哪些地方、要问对方哪些问题。适合租房合同、保险条款、账单、单位或学校发的通知。',
+      title: 'Make sense of a document that’s giving you trouble',
+      output: 'One plain-language page: what it says, what to watch, and what to ask. A lease, a policy, a bill, or a notice.',
       steps: [
-        '先把姓名、身份证号、电话、地址、账号这些删掉或换成 XXX，再贴给 AI。',
-        '让它用大白话一段一段讲这份文件在说什么。',
-        '问它：「哪些地方对我不利，或者容易踩坑？」',
-        '让它帮你列出要问对方的问题。重要的决定，还是要问懂行的人（比如律师、客服）。'
+        'Replace names, ID numbers, phone numbers, addresses, and account numbers with XXX before you paste.',
+        'Ask for a plain-language walkthrough, one section at a time.',
+        'Ask: “What here is bad for me, or easy to miss?”',
+        'Ask for questions to take back to the other side. For a real decision, still ask a person who does this for a living.'
       ],
-      done: '一页重点笔记 + 一张问题清单，去问对方时心里有数。',
-      keywords: ['合同', '租房', '房东', '房租', '涨租', '保险', '条款', '账单', '通知', '文件', '协议', '看不懂', '政策']
+      done: 'One page of notes plus questions, so you know what to ask.',
+      keywords: ['合同', '租房', '房东', '房租', '涨租', '保险', '条款', '账单', '通知', '文件', '协议', '看不懂', '政策',
+        'lease', 'landlord', 'rent', 'insurance', 'bill', 'contract']
     },
     {
       id: 'life-compare', domain: 'life', band: 'medium',
       outputs: ['list'], audience: ['self'],
-      title: '买大件之前，做一次认真的比较',
-      output: '一张对比表：3 个候选 × 5 个你最在乎的地方，加一句你的最终决定和理由。适合买家电、换手机、选宽带套餐、选兴趣班。',
+      title: 'Compare three options before a big purchase',
+      output: 'A table: 3 options × the 5 things you care about, plus one sentence on what you’ll do and why. An appliance, a phone, a plan, a class.',
       steps: [
-        '先跟 AI 说清楚你的预算、用途、最在乎的 5 件事。',
-        '把你看中的 3 个候选告诉它（型号，或者把商品介绍的文字贴进去）。',
-        '让它做成对比表，并说出每个的缺点。',
-        'AI 知道的价格和型号可能过时，表里的关键数字要自己去官网或店里再核对一遍。'
+        'Say your budget, what it’s for, and the 5 things you care about.',
+        'Name 3 options (a model name, or paste the description).',
+        'Ask for a comparison table and the downside of each.',
+        'Prices and model names go stale. Check the important numbers yourself before you buy.'
       ],
-      done: '一张核对过的对比表 + 一句写下来的决定。',
-      keywords: ['想买', '要买', '买车', '买哪个', '选哪个', '比较', '对比', '家电', '手机', '电脑', '套餐', '值不值']
+      done: 'A checked comparison table plus one written decision.',
+      keywords: ['想买', '要买', '买车', '买哪个', '选哪个', '比较', '对比', '家电', '手机', '电脑', '套餐', '值不值',
+        'buy a car', 'which one', 'compare', 'phone', 'laptop']
     },
     {
       id: 'life-budget', domain: 'life', band: 'large',
       outputs: ['list', 'plan'], audience: ['self'],
-      title: '理一理上个月的钱花哪了，定好下个月的预算',
-      output: '一张按类别分好的花销表、一份下个月的预算，再加 3 条马上能做的省钱办法。',
+      title: 'See where last month’s money went and set next month’s budget',
+      output: 'Spending by category, a budget for next month, and 3 cuts you can make now.',
       steps: [
-        '从手机银行或支付软件里看上个月的账单，把金额和用途抄下来（不要抄卡号、账号）。',
-        '让 AI 帮你分类：吃饭、交通、房租、购物、各种会员……',
-        '让它找出花得最多的 3 类，问你哪些是真需要、哪些可以少花。',
-        '一起定下下个月每一类最多花多少。',
-        '写 3 条具体的省钱办法，比如「取消某个不用的会员」。'
+        'From your bank or payment app, copy last month’s amounts and what they were for. Don’t copy card or account numbers.',
+        'Ask the AI to group them: food, transit, rent, shopping, subscriptions.',
+        'Find the 3 biggest groups. Say which are necessary and which can shrink.',
+        'Set a cap for each group next month.',
+        'Write 3 specific cuts, such as “cancel a subscription I don’t use.”'
       ],
-      done: '一张分类花销表 + 一份下个月预算（能复制到表格软件里）+ 3 条省钱办法。',
-      keywords: ['预算', '省钱', '记账', '花钱', '开销', '存钱', '理财', '工资', '月光']
+      done: 'A category table, next month’s budget, and 3 cuts.',
+      keywords: ['预算', '省钱', '记账', '花钱', '开销', '存钱', '理财', '工资', '月光',
+        'budget', 'save money', 'spending', 'subscription']
     },
-
-    // ---------- 创作 ----------
     {
       id: 'create-card', domain: 'create', band: 'small',
       outputs: ['text', 'fun'], audience: ['family'],
-      title: '给一个重要的人写几句真心话',
-      output: '一段能直接写进贺卡、生日祝福、感谢信里的话，用的是你自己的口气。',
+      title: 'Write a few honest lines for someone who matters',
+      output: 'A short note in your voice for a card, a birthday, or a thank-you.',
       steps: [
-        '告诉 AI 写给谁、什么场合、你们之间的一两件小事。',
-        '让它写 3 个版本：温暖的、俏皮的、简短的。',
-        '挑一个，把不像你会说的话改掉，加上那件小事的细节。'
+        'Say who it’s for, the occasion, and one or two small memories.',
+        'Ask for 3 versions: warm, playful, and short.',
+        'Pick one, cut anything you wouldn’t say, and add a real detail.'
       ],
-      done: '一段改好的话，抄到卡片上或者直接发出去。',
-      keywords: ['生日', '祝福', '贺卡', '感谢', '道歉', '表白', '纪念日', '父亲节', '母亲节', '新年', '妈妈', '爸爸']
+      done: 'A note you can write on a card or send.',
+      keywords: ['生日', '祝福', '贺卡', '感谢', '道歉', '表白', '纪念日', '父亲节', '母亲节', '新年', '妈妈', '爸爸',
+        'birthday', 'thank you', 'card', 'mom', 'dad']
     },
     {
       id: 'create-story', domain: 'create', band: 'medium',
       outputs: ['text', 'fun'], audience: ['family', 'self'],
-      title: '写一个完整的小故事',
-      output: '一个 1000–2000 字的短故事，有开头、有转折、有结尾。可以是给孩子的睡前故事，也可以写给自己。',
+      title: 'Write a short story with a beginning, middle, and end',
+      output: 'A 1,000–2,000 word story. A bedtime story, or one for yourself.',
       steps: [
-        '想好主角是谁、在哪里、遇到一个什么小麻烦。',
-        '让 AI 给 3 种故事走向，你挑一个。',
-        '一段一段写：你说想要什么情节，它来写，你来改。',
-        '整篇读一遍，让它指出读着别扭的地方，再改一遍。'
+        'Pick a character, a place, and one small problem.',
+        'Ask for 3 directions. Choose one.',
+        'Write it in pieces: you say what happens next, it drafts, you edit.',
+        'Read it through and ask which lines feel stiff. Revise those.'
       ],
-      done: '一个从头到尾完整的故事，能读给别人听。',
-      keywords: ['故事', '小说', '睡前', '童话', '写作', '写东西', '孩子']
+      done: 'A finished story you could read aloud.',
+      keywords: ['故事', '小说', '睡前', '童话', '写作', '写东西', '孩子',
+        'story', 'bedtime', 'fiction', 'fairy tale']
     },
     {
       id: 'create-posts', domain: 'create', band: 'medium',
       outputs: ['text'], audience: ['self', 'work'],
-      title: '给你的社交账号准备好下周要发的 5 条内容',
-      output: '5 条写好的帖子：每条有标题、正文和配图想法。小红书、朋友圈、公众号、小店的账号都行。',
+      title: 'Draft next week’s 5 posts',
+      output: '5 posts: a title, the text, and an image idea for each.',
       steps: [
-        '告诉 AI 你的账号是做什么的、写给谁看、你平时说话的风格（可以贴一条你以前发的）。',
-        '让它给 10 个选题，你挑 5 个最想写的。',
-        '一条一条写：它先写一版，你改成自己的口气，加上你自己的经历。',
-        '让它给每条配一个标题和配图想法，再排一个发布顺序。'
+        'Say what the account is for, who reads it, and how you sound. Paste an old post if you have one.',
+        'Ask for 10 topics. Keep the 5 you actually want to write.',
+        'Write them one at a time. Edit each into your voice and add something that happened to you.',
+        'Ask for a title and an image idea for each, then an order to post them.'
       ],
-      done: '5 条改好的内容存在备忘录里，下周每天复制一条发出去就行。',
-      keywords: ['小红书', '公众号', '朋友圈', '抖音', '视频号', '发帖', '账号', '涨粉', '文案', '小店']
+      done: '5 edited posts saved, one to copy each day next week.',
+      keywords: ['小红书', '公众号', '朋友圈', '抖音', '视频号', '发帖', '账号', '涨粉', '文案', '小店',
+        'social post', 'caption', 'newsletter', 'account']
     },
     {
       id: 'create-memory-book', domain: 'create', band: 'large',
       outputs: ['text', 'fun'], audience: ['family'],
-      title: '给家人或朋友做一本纪念册的全部文字',
-      output: '一本 10 页左右纪念册的文字稿：每页一个标题、一段话、配哪张照片的建议，再加开头和结尾的话。',
+      title: 'Write the text for a memory book',
+      output: 'Text for about 10 pages: a title and a paragraph per page, which photo goes there, plus an opening and a close.',
       steps: [
-        '列出想放进去的 10 段回忆（一件事、一张照片、一句话都行）。',
-        '让 AI 帮你排顺序，给每页起标题。',
-        '一页一页写：你讲细节，它帮你写成通顺的一段，你再改成自己的话。',
-        '写开头和结尾的话。',
-        '整本读一遍，把口气统一，把重复的地方删掉。'
+        'List about 10 memories (an event, a photo, or a line someone said).',
+        'Ask for an order and a title for each page.',
+        'Write one page at a time: you supply the detail, it drafts a paragraph, you put it in your words.',
+        'Write the opening and the close.',
+        'Read the whole thing. Make the voice consistent and cut repeats.'
       ],
-      done: '一份完整的纪念册文字稿，拿去排版、做相册或者手抄都可以。',
-      keywords: ['纪念册', '相册', '回忆', '照片', '毕业', '婚礼', '结婚', '退休', '纪念', '送礼', '家人']
+      done: 'A full text you can lay out, put in an album, or copy by hand.',
+      keywords: ['纪念册', '相册', '回忆', '照片', '毕业', '婚礼', '结婚', '退休', '纪念', '送礼', '家人',
+        'memory book', 'album', 'wedding', 'graduation']
     },
-
-    // ---------- 健康 ----------
     {
       id: 'health-week', domain: 'health', band: 'small',
       outputs: ['plan'], audience: ['self'],
-      title: '把这周的运动排进日程',
-      output: '一张这周的运动安排：3 次，每次 20–30 分钟，按你的身体情况和空闲时间排好。',
+      title: 'Put three workouts on this week’s calendar',
+      output: 'Three sessions this week, 20–30 minutes each, fitted to your body and your free time.',
       steps: [
-        '告诉 AI 你这周哪些时间有空、平时动得多不多、身体有没有哪里不舒服。',
-        '让它排 3 次在家或家附近就能做的运动，写清楚每次做什么、做多久。',
-        '把这 3 次写进手机日历。身体有伤病的话，先问医生能不能做。'
+        'Say which hours are free, how much you usually move, and whether anything hurts.',
+        'Ask for 3 sessions you can do at home or nearby. Each one says what to do and for how long.',
+        'Put the 3 on your calendar. If you’re injured, ask a clinician before you start.'
       ],
-      done: '手机日历里已经有这周的 3 次运动，每次做什么都写好了。',
-      keywords: ['运动', '锻炼', '健身', '跑步', '散步', '瑜伽', '久坐', '动一动']
+      done: 'Three calendar entries, each saying what you’ll do.',
+      keywords: ['运动', '锻炼', '健身', '跑步', '散步', '瑜伽', '久坐', '动一动',
+        'workout', 'run', 'walk', 'yoga']
     },
     {
       id: 'health-doctor', domain: 'health', band: 'medium',
       outputs: ['list'], audience: ['self', 'family'],
-      title: '准备好下次去看病要说的话',
-      output: '一页带去看病的笔记：不舒服的经过（按时间排）、吃过的药、想问医生的问题。',
+      title: 'Prepare what you’ll say at the next appointment',
+      output: 'One page to take with you: what happened, in order, what you’ve taken, and what you want to ask.',
       steps: [
-        '按时间顺序跟 AI 说：什么时候开始不舒服、怎么不舒服、做过什么、吃过什么药。',
-        '让它整理成一条清楚的时间线。',
-        '让它帮你想想该问医生哪些问题，你挑出最想问的 5 个。',
-        '记住：这一步是帮你把话说清楚，不是让 AI 看病，怎么治听医生的。'
+        'In order, say when it started, what it feels like, what you’ve tried, and what you’ve taken.',
+        'Ask for a clear timeline.',
+        'Ask for questions a clinician might expect. Keep the 5 you most want answered.',
+        'This only helps you say it clearly. It is not a diagnosis. Treatment comes from the clinician.'
       ],
-      done: '一页可以截图或打印带去的就诊笔记，进了诊室不会忘词。',
-      keywords: ['看病', '医生', '医院', '症状', '体检', '复诊', '吃药', '不舒服', '检查', '挂号']
+      done: 'One page you can screenshot or print, so you don’t go blank in the room.',
+      keywords: ['看病', '医生', '医院', '症状', '体检', '复诊', '吃药', '不舒服', '检查', '挂号',
+        'doctor', 'appointment', 'symptom', 'clinic']
     },
     {
       id: 'health-eating', domain: 'health', band: 'medium',
       outputs: ['list', 'plan'], audience: ['self'],
-      title: '理一理这三天吃了什么，找出最好改的 3 个习惯',
-      output: '一张三天的吃饭记录表，加上 3 个你愿意试的小改变，每个都写好了替代办法。',
+      title: 'Look at three days of meals and pick 3 habits to change',
+      output: 'A three-day food log, plus 3 small changes you’ll actually try, each with a swap.',
       steps: [
-        '凭记忆把这三天吃过、喝过的东西告诉 AI，大概的时间和分量就行。',
-        '让它整理成一张表，指出最容易改的地方（比如夜宵、含糖饮料、不吃早饭）。',
-        '从里面挑 3 个你真愿意试的，让它给每个想一个具体的替代办法。',
-        '这只是帮你看清习惯，不是看病；有慢性病、在吃药或者怀孕的话，改饮食前先问医生。'
+        'From memory, list what you ate and drank for three days. Rough times and amounts are enough.',
+        'Ask for a table and the easiest things to change (late snacks, sugary drinks, skipping breakfast).',
+        'Pick 3 you will actually try. Ask for a specific swap for each.',
+        'This shows habits. It is not medical care. If you have a condition, take medication, or are pregnant, ask a clinician before you change how you eat.'
       ],
-      done: '一张三天吃饭记录表 + 3 个写好替代办法的小改变，明天就能开始。',
-      keywords: ['减肥', '饮食', '吃得', '外卖', '零食', '体重', '减脂', '控糖', '夜宵', '奶茶']
+      done: 'A three-day table plus 3 swaps you can start tomorrow.',
+      keywords: ['减肥', '饮食', '吃得', '外卖', '零食', '体重', '减脂', '控糖', '夜宵', '奶茶',
+        'lose weight', 'diet', 'snacks', 'takeout']
     },
     {
       id: 'health-month', domain: 'health', band: 'large',
       outputs: ['plan', 'list'], audience: ['self'],
-      title: '做一份 4 周的吃饭和运动计划',
-      output: '一份 4 周计划：每周吃什么的思路和运动安排、每周的购物清单、一张简单的打卡表。',
+      title: 'Make a 4-week plan for meals and movement',
+      output: 'Four weeks: how you’ll eat, how you’ll move, a weekly shopping list, and a simple check-off sheet.',
       steps: [
-        '告诉 AI 你的目标（比如睡得好一点、少吃外卖、多动一动）、作息、会不会做饭、预算。',
-        '让它先排第 1 周，你看看能不能做到，做不到的改。',
-        '再排第 2–4 周，每周比上周多走一小步。',
-        '让它出每周的购物清单和一张打卡表。',
-        '有慢性病、在吃药或者怀孕的话，计划先给医生看一眼。'
+        'Say the goal (sleep, fewer takeout meals, moving more), your schedule, whether you cook, and your budget.',
+        'Plan week 1 first. Change anything you won’t do.',
+        'Then weeks 2–4, each one a small step past the last.',
+        'Ask for a weekly shopping list and a check-off sheet.',
+        'If you have a condition, take medication, or are pregnant, show the plan to a clinician first.'
       ],
-      done: '一份能照着过的 4 周计划 + 购物清单 + 打卡表。',
-      keywords: ['减肥', '饮食', '睡眠', '外卖', '减脂', '增肌', '作息', '体重', '养生', '健康']
+      done: 'A 4-week plan, a shopping list, and a check-off sheet.',
+      keywords: ['减肥', '饮食', '睡眠', '外卖', '减脂', '增肌', '作息', '体重', '养生', '健康',
+        'lose weight', 'sleep', 'meal plan', 'routine']
     },
-
-    // ---------- 旅行 ----------
     {
       id: 'travel-packing', domain: 'travel', band: 'small',
       outputs: ['list'], audience: ['self', 'family'],
-      title: '列一张这次出门的打包清单',
-      output: '一张按天数、天气、要做的事定制的打包清单。',
+      title: 'Make a packing list for this trip',
+      output: 'A packing list for these days, this weather, and what you’ll actually do.',
       steps: [
-        '告诉 AI 去哪、几天、和谁一起、要做什么（爬山、开会、带孩子……）。',
-        '让它列清单，按「证件和钱 / 衣服 / 洗漱 / 电子产品 / 药」分好。',
-        '删掉你用不上的，加上你自己老忘带的东西。出发前自己再看一眼天气预报。'
+        'Say where, how many days, who is going, and what you’ll do.',
+        'Ask for a list grouped as documents and money / clothes / wash kit / electronics / medicine.',
+        'Delete what you won’t use. Add what you always forget. Check the forecast yourself before you go.'
       ],
-      done: '一张出门前可以逐项打勾的清单。',
-      keywords: ['打包', '行李', '出差', '出门', '带什么']
+      done: 'A list you can tick the morning you leave.',
+      keywords: ['打包', '行李', '出差', '出门', '带什么',
+        'packing', 'luggage', 'what to pack']
     },
     {
       id: 'travel-day-trip', domain: 'travel', band: 'medium',
       outputs: ['plan', 'fun'], audience: ['self', 'family'],
-      title: '规划一次周末一日游',
-      output: '一份一天的行程表：几点去哪、怎么过去、在哪吃饭，再加一个下雨时的备用方案。',
+      title: 'Plan a one-day outing',
+      output: 'One day: when, where, how you get there, where you eat, and a backup if it rains.',
       steps: [
-        '告诉 AI 从哪出发、想去哪一带、几个人、喜欢什么（吃、逛、自然、博物馆）、预算。',
-        '让它排出一天的路线和时间表。',
-        '让它再给一个下雨天的备用方案。',
-        'AI 说的开门时间、票价、交通可能过时，出发前自己在地图和官网上核对一遍。'
+        'Say where you start, the area you want, how many people, what you like, and the budget.',
+        'Ask for a route and a timeline.',
+        'Ask for a rain backup.',
+        'Hours, ticket prices, and transit may be stale. Check a map and the official page before you go.'
       ],
-      done: '一份核对过的一日行程表 + 一个备用方案。',
-      keywords: ['周末', '一日游', '出去玩', '郊游', '遛娃', '逛街', '约会', '短途']
+      done: 'A checked one-day plan plus a backup.',
+      keywords: ['周末', '一日游', '出去玩', '郊游', '遛娃', '逛街', '约会', '短途',
+        'day trip', 'weekend', 'outing']
     },
     {
       id: 'travel-trip', domain: 'travel', band: 'large',
       outputs: ['plan'], audience: ['self', 'family'],
-      title: '规划一次 5–7 天的旅行',
-      output: '一份完整的旅行方案：每天的行程、预算表、要提前订或要办的事、紧急情况要用的信息。',
+      title: 'Plan a 5–7 day trip',
+      output: 'A full plan: each day, a budget, what to book or arrange, and a page for if something goes wrong.',
       steps: [
-        '告诉 AI 去哪、几天、几个人、预算、节奏（悠闲还是赶）、一定要去和不想去的地方。',
-        '让它先排每天的大致安排，你调整到满意为止。',
-        '让它列预算表：交通、住宿、吃饭、门票、备用金。',
-        '让它列出出发前要做的事：订票、证件或签证、保险、换钱。',
-        '整理一页紧急信息（住的地址、证件丢了怎么办等）。签证、票价这类关键信息自己上官网再核对。'
+        'Say where, how many days, who is going, the budget, the pace, and what you must or won’t do.',
+        'Ask for a rough day-by-day plan and adjust it until it feels right.',
+        'Ask for a budget: transit, lodging, food, tickets, and a buffer.',
+        'List what to do before you leave: tickets, documents, insurance, cash.',
+        'Make one page of backup info (where you’re staying, what to do if a document is lost). Check visas and prices on the official sites yourself.'
       ],
-      done: '一份能照着走的行程方案 + 预算表 + 出发前待办清单。',
-      keywords: ['旅行', '旅游', '出国', '度假', '行程', '签证', '自由行', '攻略', '假期', '蜜月']
+      done: 'A plan you can follow, a budget, and a before-you-go list.',
+      keywords: ['旅行', '旅游', '出国', '度假', '行程', '签证', '自由行', '攻略', '假期', '蜜月', '日本',
+        'travel', 'vacation', 'itinerary', 'visa', 'japan']
     }
   ];
 })();

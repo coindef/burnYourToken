@@ -29,9 +29,9 @@ find_chrome() {
     return 0
   fi
   for path in \
+    /opt/google/chrome/chrome \
     /usr/bin/google-chrome-stable \
     /usr/bin/google-chrome \
-    /opt/google/chrome/chrome \
     /usr/bin/chromium \
     /usr/bin/chromium-browser
   do
@@ -72,7 +72,7 @@ sleep 1
 # run 名字 地址 [其他参数]：DOM 存到 $PROFILE/名字.html，控制台存到 $PROFILE/名字.log
 run() {
   name="$1"; url="$2"; shift 2
-  # SANDBOX_FLAGS、TIMEOUT 在需要时才是参数，故意不打引号。
+  # SANDBOX_FLAGS and TIMEOUT are extra words only when set, so they stay unquoted.
   # shellcheck disable=SC2086
   $TIMEOUT "$CHROME_BIN" --headless=new --disable-gpu --no-first-run --no-default-browser-check \
     --user-data-dir="$PROFILE/profile-$name" --virtual-time-budget=60000 --enable-logging=stderr --v=0 \
@@ -96,9 +96,11 @@ if kind == "tests":
     bad = not line.startswith("PASS")
 else:
     ok = ('id="svc-claude"' in dom and 'id="svc-chatgpt"' not in dom
-          and '从 Claude 用量页抄三个数' in dom and '填示例试试' in dom
-          and 'name="q-output"' in dom and 'name="q-audience"' in dom)
-    print("  页面：" + ("正常显示（Claude 抄用量和问卷都在）" if ok else "没有正常显示"))
+          and 'Leftover Claude quota?' in dom and 'Try sample' in dom
+          and 'Show usage page map' in dom and 'Skip to recommendations' in dom
+          and 'name="q-output"' in dom and 'name="q-audience"' in dom
+          and 'chatgpt' not in dom.lower())
+    print("  页面：" + ("正常显示（英文 Claude 用量和问卷都在）" if ok else "没有正常显示"))
     bad = not ok
 msgs = [l.strip() for l in open(log_path, encoding="utf-8", errors="replace")
         if ":CONSOLE" in l or "Uncaught" in l]
