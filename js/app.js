@@ -33,7 +33,8 @@
     stale: false, // 做完一个项目，旧结果过时了，要重新算
     done: [], // 做完的项目 id
     doneTitles: [],
-    lastDone: ''
+    lastDone: '',
+    usageReady: false // true after Fill succeeds, Try sample, or restored numbers
   };
 
   const $ = id => document.getElementById(id);
@@ -55,15 +56,8 @@
     return node;
   }
 
-  const pct = x => Math.round(x * 10) / 10 + '%';
-  const hhmm = d => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   const serviceOf = id => SERVICES.find(s => s.id === id);
   const shownServices = () => SERVICES.filter(s => s.shown);
-
-  function planLabel(s, plan) {
-    const p = s.plans.find(x => x[0] === plan);
-    return p ? p[1] : '';
-  }
 
   // ---------------- 第 1 步：①②③ 和示意图对齐 ----------------
 
@@ -112,7 +106,7 @@
       '</div>';
   }
 
-  // Fill the sample numbers from the map, then calculate. One click to a first result.
+  // Sample numbers, then Get project. This overflow path is the one that calculates; Fill does not.
   function fillExample() {
     const p = 'claude';
     const block = slot => document.querySelector('.map-block[data-slot="' + slot + '"]');
@@ -133,6 +127,7 @@
     $(p + '-w-day').value = b3.getAttribute('data-day');
     $(p + '-w-clock').value = b3.getAttribute('data-clock');
     clearInvalid();
+    state.usageReady = true;
     $('calc-form').dispatchEvent(new Event('input', { bubbles: true }));
     calculate();
   }
@@ -224,73 +219,39 @@
     renderRecs();
   }
 
-  function resultBox(s, r) {
-    const name = s.name + (planLabel(s, r.plan) ? ' (' + planLabel(s, r.plan) + ')' : '');
-    if (!r.ok) {
-      return el('div', { class: 'result result-error', 'data-service': s.id }, [
-        el('p', { class: 'result-title', text: r.notApplicable ? 'Doesn’t apply' : 'Missing Session / Resets in / Weekly' }),
-        el('p', { class: 'small', text: name }),
-        el('ul', null, r.errors.map(e => el('li', { text: e.msg })))
-      ]);
+  // Failures only. A successful band is chips above the hero, never a result card.
+  function errorNote(s, r) {
+    if (r.notApplicable) {
+      return el('p', {
+        class: 'msg warn',
+        'data-service': s.id,
+        text: 'API billing has no session/weekly window — this tool doesn’t apply.'
+      });
     }
-    const info = core.BAND_INFO[r.band];
-    const W = core.WINDOW_NAME;
-    const R = core.RULES;
-    const neck = { session: 'Limited by Session', weekly: 'Limited by Weekly', both: 'Both the same' }[r.bottleneck];
-    const why = [
-      'Session left ' + pct(r.sessionLeft) + ', Weekly left ' + pct(r.weeklyLeft) +
-        '. The smaller one: effective left ' + pct(r.effective) + ' (' + neck + ').',
-      'Until Weekly resets: ' + core.formatUntil(r.weeklyHours) + '. Until Session resets: ' + core.formatUntil(r.sessionHours) + '.'
-    ];
-    if (r.timeCapped && r.band === 'small') {
-      why.push('By what’s left this could be ' + core.BAND_INFO[r.baseBand].label +
-        ', but only a few hours remain until the weekly reset (under ' + R.fewHours +
-        ' hours), so this is Small. Calculate again after the reset.');
-    } else if (r.timeCapped) {
-      why.push('Both are over ' + R.largeAbove + '%, which could be Large, but the weekly reset is under 1 day. Large takes 2–3 hours, often across more than one sitting, so this is Medium.');
-    } else if (r.band === 'large') {
-      why.push('Both are over ' + R.largeAbove + '%, and the weekly reset is more than 1 day away, so this is Large.');
-    } else if (r.band === 'medium') {
-      why.push('One window is only ' + R.smallBelow + '%–' + R.largeAbove + '% left, so this is Medium.');
-    } else if (r.band === 'small') {
-      why.push('One window is under ' + R.smallBelow + '% left, so this is Small.');
-    }
-    const summary = r.band === 'none'
-      ? 'Nothing left. Wait for ' + W[r.waitFor.which] + ' to reset (' + core.formatUntil(r.waitFor.hours) + '), then calculate again.'
-      : info.label + ' projects: ' + info.time + '.';
-    return el('div', { class: 'result band-' + r.band, 'data-service': s.id, 'data-band': r.band }, [
-      el('p', { class: 'result-title' }, [name + ': ', el('span', { class: 'badge', text: info.label })]),
-      el('p', { class: 'result-summary', text: summary }),
-      el('ul', { class: 'why' }, why.map(t => el('li', { text: t }))),
-      r.notes.length ? el('ul', { class: 'notes' }, r.notes.map(t => el('li', { text: t }))) : null
+    return el('div', { class: 'msg warn field-errors', 'data-service': s.id }, [
+      el('p', { class: 'empty-title', text: 'Missing Session / Resets in / Weekly' }),
+      el('ul', null, r.errors.map(e => el('li', { text: e.msg })))
     ]);
   }
 
   function renderResults() {
     const box = $('calc-results');
     box.textContent = '';
-    if (!state.computedAt) {
-      box.appendChild(el('p', { class: 'empty-title', text: 'Nothing calculated yet.' }));
-      box.appendChild(el('p', { class: 'empty-hint', text: 'Paste Session / Resets in / Weekly from Usage, or try the sample.' }));
-      return;
-    }
+    if (!state.computedAt) return;
     const ids = Object.keys(state.results);
     if (!ids.length) {
-      box.appendChild(el('p', { class: 'msg warn', text: 'Choose a plan, then Calculate.' }));
+      box.appendChild(el('p', { class: 'msg warn', text: 'Choose a plan, then Get project.' }));
       return;
     }
     if (state.stale) {
-      box.appendChild(el('p', { class: 'msg warn', text: 'These numbers are out of date. Update them from Usage, then Calculate.' }));
+      box.appendChild(el('p', { class: 'msg warn', text: 'These numbers are out of date. Update them from Usage, then Get project.' }));
     } else if (state.edited) {
-      box.appendChild(el('p', { class: 'msg warn', text: 'You changed the numbers. Click Calculate to update.' }));
+      box.appendChild(el('p', { class: 'msg warn', text: 'You changed the numbers. Click Get project to update.' }));
     }
-    shownServices().forEach(s => { if (state.results[s.id]) box.appendChild(resultBox(s, state.results[s.id])); });
-    box.appendChild(el('p', { class: 'small', text: 'Calculated when you clicked Calculate (' + hhmm(state.computedAt) + ').' }));
-    if (ids.some(id => state.results[id].ok)) {
-      box.appendChild(el('p', { class: 'next' }, [
-        'Next: ', el('a', { href: '#quiz', text: 'Preferences' }), ', or ', el('a', { href: '#recs', text: 'Pick a project' }), '.'
-      ]));
-    }
+    shownServices().forEach(s => {
+      const r = state.results[s.id];
+      if (r && !r.ok) box.appendChild(errorNote(s, r));
+    });
   }
 
   // ---------------- 第 2 步：问卷 ----------------
@@ -360,8 +321,8 @@
     return why.band || '';
   }
 
-  function card(p) {
-    return el('article', { class: 'card band-' + p.band, 'data-id': p.id, 'data-band': p.band }, [
+  function card(p, hero) {
+    return el('article', { class: 'card' + (hero ? ' hero' : '') + ' band-' + p.band, 'data-id': p.id, 'data-band': p.band }, [
       el('h3', { text: p.title }),
       el('p', { class: 'why-line', text: whyLine(p) }),
       el('details', { class: 'steps' }, [
@@ -376,7 +337,31 @@
     $('recs-status').appendChild(el('p', { class: 'msg ' + (cls || 'info'), text: text }));
   }
 
+  // One line of band chips. Not a card, and not a savings figure.
+  function renderChips(serviceId, r) {
+    const box = $('band-chips');
+    if (!box) return;
+    box.textContent = '';
+    const view = core.onboardingView(currentPhase());
+    if (!view || !view.showBandChips || !r || !r.ok || state.stale) {
+      box.hidden = true;
+      delete box.dataset.band;
+      delete box.dataset.service;
+      return;
+    }
+    const info = core.BAND_INFO[r.band];
+    box.hidden = false;
+    box.dataset.band = r.band;
+    box.dataset.service = serviceId;
+    box.appendChild(el('span', { class: 'band-chip', text: info.label }));
+    box.appendChild(el('span', { class: 'band-chip', text: info.time }));
+  }
+
   function renderRecs() {
+    try { renderRecsBody(); } finally { syncOnboarding(); }
+  }
+
+  function renderRecsBody() {
     const list = $('recs-list');
     const moreBox = $('recs-more');
     const moreList = $('more-list');
@@ -385,13 +370,14 @@
     moreList.textContent = '';
     moreBox.hidden = true;
     $('done-banner').hidden = !state.stale;
+    renderChips(null, null);
 
     const quiz = readQuiz();
     if (state.stale) return;
 
     const pick = pickService(quiz);
     if (!pick) {
-      status('Calculate in step 1 to see projects.');
+      status('Get project to see a recommendation.');
       return;
     }
     const svc = serviceOf(pick.id);
@@ -401,14 +387,16 @@
       return;
     }
     if (!r.ok) {
+      renderChips(null, null);
       status(r.notApplicable
         ? 'API billing has no session/weekly window — this tool doesn’t apply.'
         : 'Finish Session, Resets in, and Weekly in step 1.', 'warn');
       return;
     }
     if (r.band === 'none') {
+      renderChips(pick.id, r);
       status(svc.name + ' has nothing left. Wait for ' + core.WINDOW_NAME[r.waitFor.which] +
-        ' to reset (' + core.formatUntil(r.waitFor.hours) + '), then calculate again.', 'warn');
+        ' to reset (' + core.formatUntil(r.waitFor.hours) + '), then Get project again.', 'warn');
       return;
     }
 
@@ -422,11 +410,12 @@
     let head = 'From what’s left on ' + svc.name + ': ' + info.label + ' (' + info.time + '). Only this band.';
     if (pick.reason === 'bigger') head += ' Two results were tied to different bands; this is the larger one.';
     if (pick.reason === 'tie') head += ' Two results matched; this one is ' + svc.name + '.';
+    renderChips(pick.id, r);
     status(head, 'band band-' + r.band);
-    if (state.edited) status("You changed the numbers and haven't clicked Calculate. Projects below still use the last result.", 'warn');
+    if (state.edited) status("You changed the numbers and haven't clicked Get project. The project below still uses the last result.", 'warn');
 
     if (!rec.personalized) {
-      status('No preferences yet (or you skipped), so this lists every project in the band.');
+      status('No preferences yet (or you skipped). This is the first project in the band.');
     } else {
       const label = (list, id) => (list.find(x => x.id === id) || { label: id }).label;
       const picked = quiz.domains.map(core.domainLabel).concat(quiz.other.trim() ? [quiz.other.trim()] : []);
@@ -450,13 +439,46 @@
       status('Nothing in this band matches what you picked, so here is the whole band.', 'warn');
     }
     // 主列表只放这一档排第一的一张。其余同档和更小的档收进 More projects。
+    const view = core.onboardingView('project');
     const primary = rec.cards[0] || null;
     const extra = rec.cards.slice(primary ? 1 : 0).concat(rec.others, rec.smaller);
-    if (primary) list.appendChild(card(primary));
+    if (primary && view.heroCount === 1) list.appendChild(card(primary, true));
+    while (list.children.length > 1) list.removeChild(list.lastChild);
     if (extra.length) {
       moreBox.hidden = false;
       extra.forEach(p => moreList.appendChild(card(p)));
     }
+  }
+
+  function inputsReady() {
+    return shownServices().some(s => {
+      const d = readService(s.id);
+      return !!(d.plan || d.sessionPct || d.weeklyPct || d.sessionH || d.sessionM || d.sessionClock || d.weeklyDay || d.weeklyClock);
+    });
+  }
+
+  function currentPhase() {
+    if (state.computedAt) return 'project';
+    if (state.usageReady) return 'filled';
+    return 'first';
+  }
+
+  // Applies the onboarding view. Does not click Get project or Mark done.
+  function syncOnboarding() {
+    const phase = currentPhase();
+    const view = core.onboardingView(phase);
+    if (!view) return;
+    const fields = $('usage-fields');
+    if (fields) fields.hidden = !view.showPlanAndGrid;
+    const getBtn = $('calc-btn');
+    if (getBtn) getBtn.hidden = !view.showGetProject;
+    const recs = $('recs');
+    if (recs) recs.hidden = phase !== 'project' && !state.stale;
+    const main = document.querySelector('main');
+    if (main) main.setAttribute('data-phase', phase);
+    const quiz = $('quiz');
+    const overflow = $('overflow');
+    if (quiz && overflow && !overflow.contains(quiz)) overflow.appendChild(quiz);
   }
 
   // 做完一个：记下来，提示用户回用量页重新算，再推下一个（v0 手动，不自动追踪）
@@ -507,6 +529,7 @@
     state.doneTitles = Array.isArray(data.doneTitles) ? data.doneTitles.filter(x => typeof x === 'string') : [];
     state.lastDone = typeof data.lastDone === 'string' ? data.lastDone : '';
     state.stale = !!data.stale && !!state.lastDone;
+    state.usageReady = inputsReady();
     if (shownServices().some(s => $(s.id + '-plan').value)) $('restore-note').hidden = false;
   }
 
@@ -624,6 +647,8 @@
     }
     applyingFill = false;
     if (gen !== fillGen) return;
+    state.usageReady = true;
+    syncOnboarding();
     showFillStatus('ok', FILL_OK);
   }
 
@@ -633,10 +658,16 @@
     try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* 没存过 */ }
     $('calc-form').reset();
     $('quiz-form').reset();
-    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '' });
+    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false });
     shownServices().forEach(s => { togglePlan(s.id); syncModeLabels(s.id); });
     clearInvalid();
     $('restore-note').hidden = true;
+    const overflow = $('overflow');
+    if (overflow) overflow.open = false;
+    const prefs = document.querySelector('#quiz details.prefs');
+    if (prefs) prefs.open = false;
+    const how = document.querySelector('details.how-copy');
+    if (how) how.open = false;
     renderResults();
     renderRecs();
     $('clear-msg').textContent = 'Cleared quiz answers, step 1 numbers, and finished projects.';

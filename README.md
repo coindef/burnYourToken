@@ -29,21 +29,20 @@ The extension does not calculate, does not mark a project done, and does not rea
 3. Click **Load unpacked** and choose the `extension` folder in this project.
 4. If you open `index.html` as a file instead of the local server, open that extension’s details and turn on **Allow access to file URLs**.
 5. In Chrome, open Claude → Settings → Usage and leave that tab open: `https://claude.ai/settings/usage`.
-6. Open this page, pick a plan, click **Fill from Claude Usage**, then click **Calculate**.
+6. Open this page, click **Fill from Claude Usage**, pick a plan, then click **Get project**.
 
 ### Without the extension
 
-Copy **Session**, **Resets in**, and **Weekly** from Claude → Settings → Usage into step 1, then click **Calculate**. **Try sample** still fills the example numbers.
+Copy **Session**, **Resets in**, and **Weekly** from Claude → Settings → Usage. **Try sample** under **More** still fills the example numbers and runs **Get project**.
 
 ## Try it
 
-1. Click **Try sample**. Example numbers fill in and a project shows up.
-2. Or copy **Session**, **Resets in**, and **Weekly** from Claude → Settings → Usage, then click **Calculate**.
-3. Answer **Preferences**, or click **Skip to recommendations**.
-4. Open **Show steps** if you want them, then click **Mark done**.
-5. Re-copy the three numbers from Usage and click **Calculate** for the next project.
+1. A first visit shows **Leftover Claude quota?**, **Fill from Usage, then Mark done.**, and **Fill from Claude Usage**. Plan, usage fields, and **Get project** stay hidden until Fill succeeds.
+2. After Fill, click **Get project**. Nothing runs until that click, and Fill does not mark a project done.
+3. One full-width recommendation appears, with band chips above it. Open **Show steps** if you want them, then click **Mark done**.
+4. **Try sample**, **How to copy**, **Preferences**, and **More projects** are under **More**. They are not a second card on the first screen.
 
-Leave a field blank and **Calculate** marks that field. A percent outside 0–100 says it must be 0–100. **API billing** has no session or weekly window, so this tool doesn’t apply.
+Leave a field blank and **Get project** marks that field. A percent outside 0–100 says it must be 0–100. **API billing** has no session or weekly window, so this tool doesn’t apply.
 
 ## Tests (optional)
 

@@ -449,6 +449,35 @@
     return { cards: cards, others: others, smaller: smaller, fallback: fallback, personalized: prefs.personalized };
   }
 
+  // First-visit Fill path. The page applies this; it does not auto-run Get project or Mark done.
+  //   first   — before a successful Fill (or sample / restored numbers)
+  //   filled  — numbers are in; the user has not clicked Get project
+  //   project — Get project has run; main path shows one hero, never a second card
+  function onboardingView(phase) {
+    if (phase !== 'first' && phase !== 'filled' && phase !== 'project') return null;
+    const pastFirst = phase !== 'first';
+    return {
+      phase: phase,
+      lead: 'Leftover Claude quota?',
+      sub: 'Fill from Usage, then Mark done.',
+      primaryLabel: 'Fill from Claude Usage',
+      showPlanAndGrid: pastFirst,
+      showGetProject: pastFirst,
+      getProjectLabel: 'Get project',
+      showBandChips: phase === 'project',
+      heroCount: phase === 'project' ? 1 : 0,
+      preferencesOnMainPath: false,
+      secondRecommendationCard: false,
+      resultIsCard: false,
+      autoGetProject: false,
+      autoMarkDone: false,
+      showSavings: false,
+      overflow: ['try-sample', 'how-to-copy', 'preferences', 'more-projects'],
+      overflowOpenByDefault: false,
+      footer: 'Runs only in this tab. Only reads Usage after you click Fill. Nothing burns until you Mark done.'
+    };
+  }
+
   QP.core = {
     BANDS: BANDS, BAND_INFO: BAND_INFO, RULES: RULES, WEEKDAYS: WEEKDAYS, WINDOW_NAME: WINDOW_NAME, WEIGHTS: WEIGHTS,
     rank: rank, bandFromRemaining: bandFromRemaining, weeklyTimeCap: weeklyTimeCap,
@@ -456,6 +485,7 @@
     hoursUntilClock: hoursUntilClock, hoursUntilWeekly: hoursUntilWeekly,
     formatHours: formatHours, formatUntil: formatUntil,
     computeService: computeService,
-    domainLabel: domainLabel, customProject: customProject, recommend: recommend
+    domainLabel: domainLabel, customProject: customProject, recommend: recommend,
+    onboardingView: onboardingView
   };
 })();
