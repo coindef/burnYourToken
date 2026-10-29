@@ -15,9 +15,9 @@ Fill from Usage → **ONE PICK** → **Mark done**. Nothing auto-burns.
 
 Free OSS · local · Chrome extension
 
-<img src="docs/demo.png" alt="Unused Claude quota? IDLE / UNUSED." width="360">
-
-<!-- TODO: replace docs/demo.png with docs/demo.gif (8–15s) in a follow-up. Core loop only: Unused quota → Fill → ONE PICK → Mark done. English on screen. -->
+<p align="center">
+  <img src="docs/demo.gif" alt="Unused Claude quota? IDLE / UNUSED → Fill → ONE PICK → Mark done" width="720">
+</p>
 
 ### Load unpacked (30 seconds)
 
@@ -27,13 +27,15 @@ Free OSS · local · Chrome extension
 
 Without the extension: copy **Session**, **Resets in**, and **Weekly** by hand.
 
+Star the repo if the Fill→Mark done loop helped.
+
 ## What it does
 
 - **Fill** reads the open Usage tab only when you click **Fill from Claude Usage**. It copies **Session**, **Resets in**, and **Weekly**. It does not calculate, and it does not mark a project done.
 - **One** full-width recommendation. **Get project** is the click that shows it. The main path does not add a second card.
 - **Mark done** is explicit. The project stays unfinished until you click it.
 
-Monitors show quota. This fills idle quota into **one** project, then **Mark done**.
+*Usage monitors show leftover quota. burnYourToken fills IDLE / UNUSED into one pick, then Mark done — nothing auto-burns.*
 
 ## Run
 
