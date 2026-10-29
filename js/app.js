@@ -244,8 +244,9 @@
       box.appendChild(el('p', { class: 'msg warn', text: 'Choose a plan, then Get project.' }));
       return;
     }
+    // While stale, the Fill again banner already says what to do; no second warning.
     if (state.stale) {
-      box.appendChild(el('p', { class: 'msg warn', text: 'These numbers are out of date. Update them from Usage, then Get project.' }));
+      /* banner only */
     } else if (state.edited) {
       box.appendChild(el('p', { class: 'msg warn', text: 'You changed the numbers. Click Get project to update.' }));
     }
@@ -661,7 +662,7 @@
   function promoteAfterFill() {
     if (!state.filled) return;
     if (planChosen()) setPrimary('get');
-    else setPrimary(state.stale ? 'again' : 'fill');
+    else setPrimary(state.stale ? 'again' : 'none'); // no plan yet: focus is on the select, no primary
   }
 
   async function fillFromUsage() {

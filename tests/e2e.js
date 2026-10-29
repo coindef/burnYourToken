@@ -457,6 +457,17 @@
     eq(primaries(), 'calc-btn', 'after Get project: still one primary');
     cards()[0].querySelector('.done-btn').click();
     eq(primaries(), 'recalc-btn', 'after Mark done: Fill again is the one primary');
+    eq(text($('done-line')).trim(), 'Nice. Fill again when you\u2019re ready.', 'done line text');
+    eq($('done-line').childNodes.length, 1, 'done line is one text node');
+    ok(!/\u2019\s|\s\u2019/.test(text($('done-line'))), 'no whitespace around the apostrophe');
+    const probe = D.createElement('span');
+    probe.textContent = '\u2019';
+    $('done-line').appendChild(probe);
+    const emRatio = probe.getBoundingClientRect().width / parseFloat(W.getComputedStyle(probe).fontSize);
+    probe.remove();
+    ok(emRatio < 0.5, 'apostrophe is not a full-width CJK glyph (' + emRatio.toFixed(2) + 'em)');
+    eq(text($('calc-results')).indexOf('out of date'), -1, 'no stale warning while Fill again banner shows');
+    ok(!$('done-banner').hidden, 'banner visible');
     ok($('calc-btn').classList.contains('secondary'), 'Get project back to secondary after Mark done');
     $('recalc-btn').click();
     await flushFill();
@@ -471,11 +482,12 @@
     eq($('claude-plan').value, '', 'plan left blank, no guess');
     eq(D.activeElement && D.activeElement.id, 'claude-plan', 'focus on the plan select');
     ok($('calc-btn').classList.contains('secondary'), 'Get project stays secondary without a plan');
-    eq(primaries(), 'fill-usage-btn', 'no plan yet: Fill stays the one primary');
+    eq(primaries(), '', 'no plan yet: zero primaries, focus on the plan select');
+    ok($('fill-usage-btn').classList.contains('secondary'), 'Fill demoted after a successful Fill');
     setVal('claude-plan', 'max5');
     eq(primaries(), 'calc-btn', 'plan chosen: Get project promoted, Fill demoted');
     setVal('claude-plan', '');
-    eq(primaries(), 'fill-usage-btn', 'plan cleared: back to Fill');
+    eq(primaries(), '', 'plan cleared: back to zero primaries');
     setVal('claude-plan', 'max5');
 
     // Choosing a plan without a successful Fill does not promote Get project
@@ -807,7 +819,7 @@
     ok(!$('done-banner').hidden, '出现「做完了」提示');
     ok(text($('done-banner')).indexOf('Fill again when you’re ready.') !== -1, '提示再 Fill 一次');
     eq(cards().length, 0, '重新算之前不推下一个');
-    ok(text($('calc-results')).indexOf('out of date') !== -1, '计算结果标为过时');
+    ok(text($('calc-results')).indexOf('out of date') === -1, 'Fill again banner shows, no stale warning alongside it');
     $('recalc-btn').click();
     eq(D.activeElement && D.activeElement.id, 'fill-usage-btn', 'Fill again 回到 Fill 按钮');
     eq($('fill-status').textContent, 'Reading Usage…', 'Fill again 直接触发 Fill');
