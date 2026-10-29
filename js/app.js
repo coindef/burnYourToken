@@ -244,9 +244,10 @@
       box.appendChild(el('p', { class: 'msg warn', text: 'Choose a plan, then Get project.' }));
       return;
     }
-    // While stale, the Fill again banner already says what to do; no second warning.
+    // Stale warning is always drawn when stale; syncStaleWarning hides it only while the
+    // Fill again banner is actually on screen (that banner already says what to do).
     if (state.stale) {
-      /* banner only */
+      box.appendChild(el('p', { class: 'msg warn', id: 'stale-warn', text: 'These numbers are out of date. Update them from Usage, then Get project.' }));
     } else if (state.edited) {
       box.appendChild(el('p', { class: 'msg warn', text: 'You changed the numbers. Click Get project to update.' }));
     }
@@ -254,6 +255,7 @@
       const r = state.results[s.id];
       if (r && !r.ok) box.appendChild(errorNote(s, r));
     });
+    syncStaleWarning();
   }
 
   // ---------------- 第 2 步：问卷 ----------------
@@ -465,6 +467,17 @@
     return 'first';
   }
 
+  function bannerVisible() {
+    const banner = $('done-banner');
+    const recs = $('recs');
+    return !!banner && !banner.hidden && !!recs && !recs.hidden;
+  }
+
+  function syncStaleWarning() {
+    const warn = $('stale-warn');
+    if (warn) warn.hidden = bannerVisible();
+  }
+
   // Applies the onboarding view. Does not click Get project or Mark done.
   function syncOnboarding() {
     const phase = currentPhase();
@@ -481,6 +494,7 @@
     const quiz = $('quiz');
     const overflow = $('overflow');
     if (quiz && overflow && !overflow.contains(quiz)) overflow.appendChild(quiz);
+    syncStaleWarning();
   }
 
   // 做完一个：记下来，提示用户回用量页重新算，再推下一个（v0 手动，不自动追踪）
@@ -774,6 +788,7 @@
   QP.app = {
     SERVICES: SERVICES, state: state, calculate: calculate, renderRecs: renderRecs, clearAll: clearAll,
     // Same-window post, so a reply's source is this tab (the extension content script does this too).
+    renderResults: renderResults, syncStaleWarning: syncStaleWarning,
     postToPage: function (payload) { window.postMessage(payload, '*'); }
   };
 })();

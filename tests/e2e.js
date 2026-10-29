@@ -466,7 +466,7 @@
     const emRatio = probe.getBoundingClientRect().width / parseFloat(W.getComputedStyle(probe).fontSize);
     probe.remove();
     ok(emRatio < 0.5, 'apostrophe is not a full-width CJK glyph (' + emRatio.toFixed(2) + 'em)');
-    eq(text($('calc-results')).indexOf('out of date'), -1, 'no stale warning while Fill again banner shows');
+    ok(!$('stale-warn') || !isShown($('stale-warn')), 'no stale warning while Fill again banner shows');
     ok(!$('done-banner').hidden, 'banner visible');
     ok($('calc-btn').classList.contains('secondary'), 'Get project back to secondary after Mark done');
     $('recalc-btn').click();
@@ -819,7 +819,18 @@
     ok(!$('done-banner').hidden, '出现「做完了」提示');
     ok(text($('done-banner')).indexOf('Fill again when you’re ready.') !== -1, '提示再 Fill 一次');
     eq(cards().length, 0, '重新算之前不推下一个');
-    ok(text($('calc-results')).indexOf('out of date') === -1, 'Fill again banner shows, no stale warning alongside it');
+    ok(!$('done-banner').hidden && !$('recs').hidden, 'Fill again banner visible');
+    ok($('stale-warn') && $('stale-warn').hidden, 'stale warning hidden while the banner is visible');
+    // Stale but the banner is not on screen: the warning must still show.
+    $('done-banner').hidden = true;
+    W.QP.app.renderResults();
+    W.QP.app.syncStaleWarning();
+    ok(W.QP.app.state.stale, 'still stale');
+    ok($('stale-warn') && !$('stale-warn').hidden && isShown($('stale-warn')), 'stale warning shows when the banner is hidden');
+    ok(text($('calc-results')).indexOf('These numbers are out of date.') !== -1, 'warning copy');
+    $('done-banner').hidden = false;
+    W.QP.app.syncStaleWarning();
+    ok($('stale-warn').hidden, 'banner back → warning hidden again');
     $('recalc-btn').click();
     eq(D.activeElement && D.activeElement.id, 'fill-usage-btn', 'Fill again 回到 Fill 按钮');
     eq($('fill-status').textContent, 'Reading Usage…', 'Fill again 直接触发 Fill');
