@@ -110,7 +110,7 @@
 
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
-  const FILL_NO_EXT = 'Extension not found. Copy the three numbers, or load the unpacked extension (see README).';
+  const FILL_NO_EXT = 'Extension not found. Load it from the README, or type the numbers.';
   const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
 
   function removeUsageBridge() {
@@ -199,7 +199,7 @@
     ok(!isShown(prefs), 'preferences are off the main path');
     eq(prefs.querySelector('summary').textContent.trim(), 'Preferences (optional)');
     ok($('overflow') && !$('overflow').open, 'overflow starts closed');
-    eq(text(D.querySelector('.lead')).trim(), 'Fill from Usage, then Mark done.');
+    eq(text(D.querySelector('.lead')).trim(), 'Fill from Usage, get one project, Mark done.');
     ok(!D.querySelector('.jump') && !D.querySelector('.loop-line'), 'no jump nav or loop line');
     eq(text(D.querySelector('h1')).trim(), 'Leftover Claude quota?');
     const honesty = 'Runs only in this tab. Only reads Usage after you click Fill. Nothing burns until you Mark done.';
@@ -298,6 +298,8 @@
     eq($('fill-status').textContent, FILL_WORKING, 'working');
     await wait(1700);
     eq($('fill-status').textContent, FILL_NO_EXT, 'no extension');
+    const readme = $('fill-status').querySelector('a');
+    ok(readme && readme.getAttribute('href') === 'README.md#load-unpacked-30-seconds' && readme.textContent === 'README', 'links to README install');
     eq($('claude-s-pct').value, '', 'still empty');
     eq(text($('calc-results')).trim(), '', 'no extension does not calculate');
     eq(D.querySelector('main').dataset.phase, 'first', 'failed Fill stays on the first screen');
@@ -331,7 +333,9 @@
     eq(D.querySelector('main').dataset.phase, 'filled', 'fields after Fill');
     ok(isShown($('usage-fields')), 'plan and grid revealed');
     ok(isShown($('calc-btn')) && $('calc-btn').textContent.trim() === 'Get project', 'sole secondary CTA');
-    eq(shownButtons().filter(b => b.classList.contains('secondary')).map(b => b.id).join(), 'calc-btn', 'no other secondary CTA');
+    ok($('calc-btn').classList.contains('primary') && !$('calc-btn').classList.contains('secondary'), 'Get project is primary after Fill');
+    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Get project has focus after Fill');
+    eq(shownButtons().filter(b => b.classList.contains('secondary')).length, 0, 'no other secondary CTA');
     ok(!isShown($('example-btn')), 'Try sample still in overflow');
     eq($('band-chips').hidden, true, 'no chips before Get project');
     ok(!isShown($('recs')), 'no hero before Get project');
@@ -708,8 +712,8 @@
       done.push(c.dataset.id);
       c.querySelector('.done-btn').click();
       ok(!$('done-banner').hidden, '出现「做完了」');
-      ok(text($('done-banner')).indexOf('Nice — re-copy the three numbers from Usage, then Get project again.') !== -1, text($('done-banner')));
-      eq($('recalc-btn').textContent.trim(), 'Back to step 1');
+      ok(text($('done-banner')).indexOf('Nice. Fill again when you’re ready.') !== -1, text($('done-banner')));
+      eq($('recalc-btn').textContent.trim(), 'Fill again');
       eq(cards().length, 0, '重新算之前不推');
     }
     eq(done.length, 3, '三轮各做完一个');
@@ -749,11 +753,12 @@
     const doneId = first.dataset.id;
     first.querySelector('.done-btn').click();
     ok(!$('done-banner').hidden, '出现「做完了」提示');
-    ok(text($('done-banner')).indexOf('re-copy the three numbers') !== -1, '提示重新抄数字');
+    ok(text($('done-banner')).indexOf('Fill again when you’re ready.') !== -1, '提示再 Fill 一次');
     eq(cards().length, 0, '重新算之前不推下一个');
     ok(text($('calc-results')).indexOf('out of date') !== -1, '计算结果标为过时');
     $('recalc-btn').click();
-    eq(D.activeElement && D.activeElement.id, 'claude-s-pct', '光标回到第 1 步的百分比');
+    eq(D.activeElement && D.activeElement.id, 'fill-usage-btn', 'Fill again 回到 Fill 按钮');
+    eq($('fill-status').textContent, 'Reading Usage…', 'Fill again 直接触发 Fill');
     setVal('claude-s-pct', '60'); // 做完项目用掉了一些：剩 40% → 中档
     calc();
     ok($('done-banner').hidden, '提示消失');
@@ -901,6 +906,7 @@
     ok(D.querySelector('input[name="q-output"][value="fun"]').checked, '成果带回');
     ok(D.querySelector('input[name="q-audience"][value="self"]').checked, '给谁带回');
     ok(!$('restore-note').hidden, '提示对照用量页再算');
+    eq(text($('restore-note')).trim(), 'Restored from this tab. Check Usage, then Get project.', 'restore hint copy');
     W.QP.app.clearAll();
     await reloadApp();
     eq($('claude-plan').value, '', '清除后没有带回');

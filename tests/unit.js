@@ -674,7 +674,7 @@
   test('onboarding view: first screen, after Fill, after Get project', () => {
     const first = C.onboardingView('first');
     eq(first.lead, 'Leftover Claude quota?');
-    eq(first.sub, 'Fill from Usage, then Mark done.');
+    eq(first.sub, 'Fill from Usage, get one project, Mark done.');
     eq(first.primaryLabel, 'Fill from Claude Usage');
     eq(first.showPlanAndGrid, false, 'plan and grid hidden');
     eq(first.showGetProject, false, 'Get project hidden');
