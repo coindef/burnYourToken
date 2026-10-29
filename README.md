@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme-lockup-dark.png">
+    <img src="docs/brand/readme-lockup-light.png" alt="burnYourToken" width="720">
+  </picture>
+</p>
+
 # burnYourToken
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![GitHub stars](https://img.shields.io/github/stars/coindef/burnYourToken)](https://github.com/coindef/burnYourToken/stargazers)
