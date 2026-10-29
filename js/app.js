@@ -634,7 +634,12 @@
     const btn = $('calc-btn');
     if (!btn) return;
     btn.classList.toggle('primary', on);
-    btn.classList.toggle('secondary', !on);
+    btn.classList.toggle('secondary', !on);    // Only one primary at a time: Fill steps down while Get project leads.
+    const fill = $('fill-usage-btn');
+    if (fill) {
+      fill.classList.toggle('primary', !on);
+      fill.classList.toggle('secondary', on);
+    }
   }
 
   async function fillFromUsage() {

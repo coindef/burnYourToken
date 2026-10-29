@@ -335,7 +335,9 @@
     ok(isShown($('calc-btn')) && $('calc-btn').textContent.trim() === 'Get project', 'sole secondary CTA');
     ok($('calc-btn').classList.contains('primary') && !$('calc-btn').classList.contains('secondary'), 'Get project is primary after Fill');
     eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Get project has focus after Fill');
-    eq(shownButtons().filter(b => b.classList.contains('secondary')).length, 0, 'no other secondary CTA');
+    eq(shownButtons().filter(b => b.classList.contains('primary')).map(b => b.id).join(), 'calc-btn', 'only one primary after Fill');
+    ok($('fill-usage-btn').classList.contains('secondary') && !$('fill-usage-btn').classList.contains('primary'), 'Fill steps down to secondary');
+    eq(shownButtons().filter(b => b.classList.contains('secondary')).map(b => b.id).join(), 'fill-usage-btn', 'no other secondary CTA');
     ok(!isShown($('example-btn')), 'Try sample still in overflow');
     eq($('band-chips').hidden, true, 'no chips before Get project');
     ok(!isShown($('recs')), 'no hero before Get project');
@@ -431,6 +433,9 @@
     eq($('done-banner').hidden, true, 'fill still does not mark done');
     eq(W.QP.app.state.done.length, 0, 'done list still empty');
     removeUsageBridge();
+    W.QP.app.clearAll();
+    ok($('fill-usage-btn').classList.contains('primary') && !$('fill-usage-btn').classList.contains('secondary'), 'Fill primary again after clearAll');
+    ok($('calc-btn').classList.contains('secondary') && !$('calc-btn').classList.contains('primary'), 'Get project secondary after clearAll');
   });
 
   test('已用/还剩同时管①和③：标签跟着变，每周和 5 小时用同一种算法', async () => {
