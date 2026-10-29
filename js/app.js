@@ -255,6 +255,7 @@
       const r = state.results[s.id];
       if (r && !r.ok) box.appendChild(errorNote(s, r));
     });
+    syncStaleWarning();
   }
 
   // ---------------- 第 2 步：问卷 ----------------
@@ -466,7 +467,6 @@
     return 'first';
   }
 
-  // Applies the onboarding view. Does not click Get project or Mark done.
   function bannerVisible() {
     const banner = $('done-banner');
     const recs = $('recs');
@@ -478,6 +478,7 @@
     if (warn) warn.hidden = bannerVisible();
   }
 
+  // Applies the onboarding view. Does not click Get project or Mark done.
   function syncOnboarding() {
     const phase = currentPhase();
     const view = core.onboardingView(phase);
