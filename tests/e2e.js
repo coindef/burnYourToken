@@ -438,6 +438,53 @@
     ok($('calc-btn').classList.contains('secondary') && !$('calc-btn').classList.contains('primary'), 'Get project secondary after clearAll');
   });
 
+  test('Fill sets the plan when Usage shows it; otherwise the plan select is next. One primary at every step', async () => {
+    const primaries = () => shownButtons().filter(b => b.classList.contains('primary')).map(b => b.id).join();
+    const usage = fixtureUsage();
+    eq(usage.plan, 'pro', 'fixture shows Pro');
+
+    // Path A: plan read from Usage
+    await fresh();
+    eq(primaries(), 'fill-usage-btn', 'first screen: Fill is the one primary');
+    installUsageBridge(() => ({ ok: true, usage: usage }));
+    $('fill-usage-btn').click();
+    await flushFill();
+    eq($('claude-plan').value, 'pro', 'plan set from Usage');
+    eq(primaries(), 'calc-btn', 'plan read: Get project is the one primary');
+    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'focus on Get project');
+    calc();
+    eq(cards().length, 1, 'one card');
+    eq(primaries(), 'calc-btn', 'after Get project: still one primary');
+    cards()[0].querySelector('.done-btn').click();
+    eq(primaries(), 'recalc-btn', 'after Mark done: Fill again is the one primary');
+    ok($('calc-btn').classList.contains('secondary'), 'Get project back to secondary after Mark done');
+    $('recalc-btn').click();
+    await flushFill();
+    eq(primaries(), 'calc-btn', 'Fill again succeeded with a plan: Get project is primary again');
+
+    // Path B: plan not on the page
+    await fresh();
+    const noPlan = Object.assign({}, usage, { plan: '' });
+    installUsageBridge(() => ({ ok: true, usage: noPlan }));
+    $('fill-usage-btn').click();
+    await flushFill();
+    eq($('claude-plan').value, '', 'plan left blank, no guess');
+    eq(D.activeElement && D.activeElement.id, 'claude-plan', 'focus on the plan select');
+    ok($('calc-btn').classList.contains('secondary'), 'Get project stays secondary without a plan');
+    eq(primaries(), 'fill-usage-btn', 'no plan yet: Fill stays the one primary');
+    setVal('claude-plan', 'max5');
+    eq(primaries(), 'calc-btn', 'plan chosen: Get project promoted, Fill demoted');
+    setVal('claude-plan', '');
+    eq(primaries(), 'fill-usage-btn', 'plan cleared: back to Fill');
+    setVal('claude-plan', 'max5');
+
+    // Choosing a plan without a successful Fill does not promote Get project
+    W.QP.app.clearAll();
+    eq(primaries(), 'fill-usage-btn', 'clearAll restores Fill');
+    ok($('calc-btn').classList.contains('secondary'), 'clearAll keeps Get project secondary');
+    removeUsageBridge();
+  });
+
   test('已用/还剩同时管①和③：标签跟着变，每周和 5 小时用同一种算法', async () => {
     await fresh();
     const phrase = node => text(node).replace(/\s+/g, '');

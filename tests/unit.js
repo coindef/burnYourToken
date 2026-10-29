@@ -572,8 +572,18 @@
     eq(usage.weeklyPct, '31', 'fullest weekly, not Sonnet 12 and not credits 90');
     eq(usage.weeklyDay, '4', 'Thursday');
     eq(usage.weeklyClock, '08:00', 'weekly time');
-    eq(Object.keys(usage).sort().join(','), 'mode,ok,sessionClock,sessionH,sessionM,sessionPct,sessionResetType,weeklyClock,weeklyDay,weeklyPct');
+    eq(usage.plan, 'pro', 'plan read from "Plan usage limits" in the fixture');
+    eq(Object.keys(usage).sort().join(','), 'mode,ok,plan,sessionClock,sessionH,sessionM,sessionPct,sessionResetType,weeklyClock,weeklyDay,weeklyPct');
     ok(JSON.stringify(usage).indexOf('Sonnet') === -1 && JSON.stringify(usage).indexOf('90') === -1, 'no extra prose');
+  });
+
+  test('Usage parse: plan only when the page shows a known label', () => {
+    const now = new Date(2026, 6, 13, 10, 0, 0);
+    const body = '<h3>Current session</h3><p>10% used</p><h3>Weekly limits</h3><p>All models</p><p>20% used</p>';
+    eq(parseUsageRoot(usageDoc('<h2>Plan usage limits</h2><p>Pro</p>' + body), now).plan, 'pro', 'Pro');
+    eq(parseUsageRoot(usageDoc(body), now).plan, '', 'no plan line → blank');
+    eq(parseUsageRoot(usageDoc('<h2>Plan usage limits</h2><p>Something new</p>' + body), now).plan, '', 'unknown label → blank, no guess');
+    eq(parseUsageRoot(usageDoc('<h2>Plan usage limits</h2>' + body), now).plan, '', 'heading without a label → blank');
   });
 
   test('Usage parse: clock resets, fullest model, left vs used, empty session, closed page', () => {
