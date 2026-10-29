@@ -168,6 +168,19 @@
     return emptyReset();
   }
 
+  // The plan name as Usage shows it under "Plan usage limits". Only labels seen in the
+  // Usage fixtures are mapped; anything else returns '' so the user picks the plan.
+  const PLAN_LABELS = { 'pro': 'pro' };
+
+  function parsePlan(text, sessionAt) {
+    const head = text.slice(0, sessionAt);
+    const at = head.search(/plan usage limits/i);
+    if (at < 0) return '';
+    const lines = head.slice(at).split('\n').map(l => l.trim()).filter(Boolean);
+    const label = (lines[1] || '').toLowerCase();
+    return Object.prototype.hasOwnProperty.call(PLAN_LABELS, label) ? PLAN_LABELS[label] : '';
+  }
+
   function parseUsageRoot(root, now) {
     const clock = now instanceof Date ? now : new Date();
     const text = visibleText(root);
@@ -190,6 +203,7 @@
     const weeklyReset = parseReset(weekly.segment, clock);
     return {
       ok: true,
+      plan: parsePlan(text, sessionAt),
       mode: session.mode,
       sessionPct: session.pct,
       sessionResetType: sessionReset.kind,

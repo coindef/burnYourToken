@@ -34,6 +34,7 @@
     done: [], // 做完的项目 id
     doneTitles: [],
     lastDone: '',
+    filled: false, // a Fill succeeded since the last Mark done / Clear
     usageReady: false // true after Fill succeeds, Try sample, or restored numbers
   };
 
@@ -243,8 +244,9 @@
       box.appendChild(el('p', { class: 'msg warn', text: 'Choose a plan, then Get project.' }));
       return;
     }
+    // While stale, the Fill again banner already says what to do; no second warning.
     if (state.stale) {
-      box.appendChild(el('p', { class: 'msg warn', text: 'These numbers are out of date. Update them from Usage, then Get project.' }));
+      /* banner only */
     } else if (state.edited) {
       box.appendChild(el('p', { class: 'msg warn', text: 'You changed the numbers. Click Get project to update.' }));
     }
@@ -489,6 +491,8 @@
     }
     state.lastDone = p.title;
     state.stale = true;
+    state.filled = false;
+    setPrimary('again');
     save();
     renderResults();
     renderRecs();
@@ -603,6 +607,12 @@
   // Writes Session, Resets in, and Weekly. Empty or missing weekday/time clears those fields.
   function writeUsage(p, u) {
     if (!u) return;
+    // Plan only when the Usage page showed one we recognise; never overwrite a plan already chosen.
+    const planSel = $(p + '-plan');
+    if (u.plan && !planSel.value && Array.from(planSel.options).some(o => o.value === u.plan)) {
+      planSel.value = u.plan;
+      togglePlan(p);
+    }
     if (u.mode === 'used' || u.mode === 'left') {
       setRadio(p + '-mode', u.mode);
       syncModeLabels(p);
@@ -629,17 +639,30 @@
     $(p + '-w-clock').value = u.weeklyClock != null && String(u.weeklyClock) !== '' ? String(u.weeklyClock) : '';
   }
 
-  // After a successful Fill, Get project is the next click, so it takes the primary style.
-  function setGetProjectPrimary(on) {
-    const btn = $('calc-btn');
-    if (!btn) return;
-    btn.classList.toggle('primary', on);
-    btn.classList.toggle('secondary', !on);    // Only one primary at a time: Fill steps down while Get project leads.
-    const fill = $('fill-usage-btn');
-    if (fill) {
-      fill.classList.toggle('primary', !on);
-      fill.classList.toggle('secondary', on);
-    }
+  // Exactly one primary button at each step:
+  //   'fill'  – first screen, or after Clear: Fill from Claude Usage
+  //   'get'   – Fill succeeded and a plan is chosen: Get project
+  //   'again' – after Mark done: the banner's Fill again
+  // Get project is promoted only by a successful Fill plus a chosen plan.
+  function setPrimary(which) {
+    [['fill-usage-btn', 'fill'], ['calc-btn', 'get'], ['recalc-btn', 'again']].forEach(pair => {
+      const btn = $(pair[0]);
+      if (!btn) return;
+      const on = pair[1] === which;
+      btn.classList.toggle('primary', on);
+      btn.classList.toggle('secondary', !on);
+    });
+  }
+
+  function planChosen() {
+    return !!$('claude-plan').value;
+  }
+
+  // After a successful Fill: Get project leads once a plan is set; otherwise the plan select is next.
+  function promoteAfterFill() {
+    if (!state.filled) return;
+    if (planChosen()) setPrimary('get');
+    else setPrimary(state.stale ? 'again' : 'none'); // no plan yet: focus is on the select, no primary
   }
 
   async function fillFromUsage() {
@@ -669,10 +692,11 @@
     applyingFill = false;
     if (gen !== fillGen) return;
     state.usageReady = true;
+    state.filled = true;
     syncOnboarding();
-    setGetProjectPrimary(true);
     showFillStatus('ok', FILL_OK);
-    $('calc-btn').focus({ preventScroll: true });
+    promoteAfterFill();
+    (planChosen() ? $('calc-btn') : $('claude-plan')).focus({ preventScroll: true });
   }
 
   function clearAll() {
@@ -681,11 +705,11 @@
     try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* 没存过 */ }
     $('calc-form').reset();
     $('quiz-form').reset();
-    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false });
+    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false, filled: false });
     shownServices().forEach(s => { togglePlan(s.id); syncModeLabels(s.id); });
     clearInvalid();
     $('restore-note').hidden = true;
-    setGetProjectPrimary(false);
+    setPrimary('fill');
     const overflow = $('overflow');
     if (overflow) overflow.open = false;
     const prefs = document.querySelector('#quiz details.prefs');
@@ -706,7 +730,7 @@
 
     shownServices().forEach(s => {
       const p = s.id;
-      $(p + '-plan').addEventListener('change', () => togglePlan(p));
+      $(p + '-plan').addEventListener('change', () => { togglePlan(p); promoteAfterFill(); });
       // 点进哪种重置时间的输入框，就自动选上那一种
       [p + '-s-h', p + '-s-m'].forEach(id => $(id).addEventListener('focus', () => setRadio(p + '-s-reset', 'countdown')));
       $(p + '-s-clock').addEventListener('focus', () => setRadio(p + '-s-reset', 'clock'));
