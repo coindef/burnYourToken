@@ -502,10 +502,11 @@
     $('recs-title').focus({ preventScroll: true });
   }
 
+  // Fill again: back to step 1 and run Fill directly. Get project stays a separate click.
   function goRecalc() {
     $('calc').scrollIntoView({ block: 'start' });
-    const first = shownServices().map(s => $(s.id + '-s-pct')).find(n => n && n.offsetParent !== null);
-    (first || $('claude-plan')).focus({ preventScroll: true });
+    $('fill-usage-btn').focus({ preventScroll: true });
+    fillFromUsage();
   }
 
   // ---------------- 只存在本标签页 ----------------
@@ -536,7 +537,8 @@
   // Fill from Claude Usage. Copy is the UX lock; one click only writes step 1 fields.
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
-  const FILL_NO_EXT = 'Extension not found. Copy the three numbers, or load the unpacked extension (see README).';
+  const FILL_NO_EXT = 'Extension not found. Load it from the README, or type the numbers.';
+  const README_INSTALL = 'README.md#load-unpacked-30-seconds';
   const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
   const FILL_TIMEOUT_MS = 1500;
   let fillGen = 0;
@@ -556,6 +558,12 @@
     node.hidden = false;
     node.className = 'fill-status ' + kind;
     node.textContent = text;
+    if (text === FILL_NO_EXT) {
+      // Point "README" at the install steps. Relative link: the page stays offline.
+      node.textContent = 'Extension not found. Load it from the ';
+      node.appendChild(el('a', { href: README_INSTALL, text: 'README' }));
+      node.appendChild(document.createTextNode(', or type the numbers.'));
+    }
     if (kind === 'ok') {
       fillTimer = setTimeout(() => {
         fillTimer = 0;
@@ -621,6 +629,19 @@
     $(p + '-w-clock').value = u.weeklyClock != null && String(u.weeklyClock) !== '' ? String(u.weeklyClock) : '';
   }
 
+  // After a successful Fill, Get project is the next click, so it takes the primary style.
+  function setGetProjectPrimary(on) {
+    const btn = $('calc-btn');
+    if (!btn) return;
+    btn.classList.toggle('primary', on);
+    btn.classList.toggle('secondary', !on);    // Only one primary at a time: Fill steps down while Get project leads.
+    const fill = $('fill-usage-btn');
+    if (fill) {
+      fill.classList.toggle('primary', !on);
+      fill.classList.toggle('secondary', on);
+    }
+  }
+
   async function fillFromUsage() {
     const gen = ++fillGen;
     showFillStatus('working', FILL_WORKING);
@@ -649,7 +670,9 @@
     if (gen !== fillGen) return;
     state.usageReady = true;
     syncOnboarding();
+    setGetProjectPrimary(true);
     showFillStatus('ok', FILL_OK);
+    $('calc-btn').focus({ preventScroll: true });
   }
 
   function clearAll() {
@@ -662,6 +685,7 @@
     shownServices().forEach(s => { togglePlan(s.id); syncModeLabels(s.id); });
     clearInvalid();
     $('restore-note').hidden = true;
+    setGetProjectPrimary(false);
     const overflow = $('overflow');
     if (overflow) overflow.open = false;
     const prefs = document.querySelector('#quiz details.prefs');

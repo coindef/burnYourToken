@@ -459,7 +459,7 @@
     return {
       phase: phase,
       lead: 'Leftover Claude quota?',
-      sub: 'Fill from Usage, then Mark done.',
+      sub: 'Fill from Usage, get one project, Mark done.',
       primaryLabel: 'Fill from Claude Usage',
       showPlanAndGrid: pastFirst,
       showGetProject: pastFirst,
