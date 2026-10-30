@@ -18,6 +18,15 @@
   const $ = id => D.getElementById(id);
   const text = node => (node ? node.textContent : '');
 
+  // Fill scrolls the next control into view (scroll-behavior is smooth, so give it a moment).
+  // Headless runs use virtual time, which does not drive smooth-scroll animation, so the
+  // Fill-scroll checks switch the iframe to instant scrolling first.
+  function instantScroll(on) { D.documentElement.style.scrollBehavior = on ? 'auto' : ''; }
+  // block: 'nearest' lines the control up with the bottom edge, so allow 1px of subpixel rounding.
+  function inViewport(node) {
+    const r = node.getBoundingClientRect();
+    return r.top >= -1 && r.bottom <= W.innerHeight + 1;
+  }
   function isShown(node) {
     if (!node || !node.isConnected) return false;
     for (let n = node; n && n !== D.body; n = n.parentElement) {
@@ -110,6 +119,7 @@
 
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
+  const FILL_AGAIN = 'Updated from Usage.';
   const FILL_NO_EXT = 'Extension not found. Load it from the README, or type the numbers.';
   const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
 
@@ -279,6 +289,26 @@
     frame.style.width = '';
   });
 
+  test('Resets in stays one row (In [h] hr [m] min) on mobile and desktop; slots 1 and 3 unchanged', async () => {
+    await fresh();
+    $('example-btn').click();
+    await wait(50);
+    async function oneRow(width) {
+      frame.style.width = width + 'px';
+      await wait(80);
+      const row = D.querySelector('.copy-slot[data-slot="2"] .reset .choice');
+      const parts = [row.querySelector('input[type="radio"]'), $('claude-s-h'), $('claude-s-m')];
+      const mids = parts.map(n => { const r = n.getBoundingClientRect(); return r.top + r.height / 2; });
+      ok(mids.every(m => Math.abs(m - mids[0]) <= 4), width + ' Resets in is one row: ' + mids.map(Math.round).join('/'));
+      ok(parts[0].getBoundingClientRect().left < parts[1].getBoundingClientRect().left &&
+         parts[1].getBoundingClientRect().left < parts[2].getBoundingClientRect().left, width + ' order: radio, hours, minutes');
+      ok(D.documentElement.scrollWidth <= W.innerWidth + 1, width + ' no horizontal scroll');
+    }
+    await oneRow(390);
+    await oneRow(1280);
+    frame.style.width = '';
+  });
+
   test('Fill from Claude Usage fills Session, Resets in, and Weekly; Calculate is a separate click', async () => {
     await fresh();
     await reloadApp();
@@ -379,7 +409,7 @@
     $('fill-usage-btn').click();
     await flushFill();
     eq($('claude-s-pct').value, '72', 'filled again');
-    eq($('fill-status').textContent, FILL_OK, 'success again');
+    eq($('fill-status').textContent, FILL_AGAIN, 'second read says Updated');
     ok(text($('calc-results')).indexOf('Click Get project to update') !== -1, 'second fill does not calculate');
     eq(resultOf('claude').dataset.band, 'medium', 'band unchanged');
     await wait(2200);
@@ -406,7 +436,7 @@
     eq($('claude-s-clock').value, '10:30', 'session clock');
     ok(D.querySelector('input[name="claude-s-reset"][value="clock"]').checked, 'clock mode');
     eq($('claude-s-h').value, '', 'countdown hours cleared');
-    eq($('fill-status').textContent, FILL_OK, 'clock fill success');
+    eq($('fill-status').textContent, FILL_AGAIN, 'clock fill success (later read)');
     eq(resultOf('claude').dataset.band, 'medium', 'still the previous calculation');
     calc();
     eq(resultOf('claude').dataset.band, 'large', 'clock fill calculates');
@@ -447,11 +477,14 @@
     await fresh();
     eq(primaries(), 'fill-usage-btn', 'first screen: Fill is the one primary');
     installUsageBridge(() => ({ ok: true, usage: usage }));
+    instantScroll(true);
+    W.scrollTo(0, 0);
     $('fill-usage-btn').click();
     await flushFill();
     eq($('claude-plan').value, 'pro', 'plan set from Usage');
     eq(primaries(), 'calc-btn', 'plan read: Get project is the one primary');
     eq(D.activeElement && D.activeElement.id, 'calc-btn', 'focus on Get project');
+    ok(inViewport($('calc-btn')), 'plan read: Get project scrolled into view');
     calc();
     eq(cards().length, 1, 'one card');
     eq(primaries(), 'calc-btn', 'after Get project: still one primary');
@@ -472,15 +505,22 @@
     $('recalc-btn').click();
     await flushFill();
     eq(primaries(), 'calc-btn', 'Fill again succeeded with a plan: Get project is primary again');
+    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Fill again: focus on Get project');
+    ok(inViewport($('calc-btn')), 'Fill again: Get project in view');
+    eq($('fill-status').textContent, FILL_AGAIN, 'Fill again says Updated from Usage.');
 
     // Path B: plan not on the page
     await fresh();
     const noPlan = Object.assign({}, usage, { plan: '' });
     installUsageBridge(() => ({ ok: true, usage: noPlan }));
+    instantScroll(true);
+    W.scrollTo(0, 0);
     $('fill-usage-btn').click();
     await flushFill();
     eq($('claude-plan').value, '', 'plan left blank, no guess');
     eq(D.activeElement && D.activeElement.id, 'claude-plan', 'focus on the plan select');
+    ok(inViewport($('claude-plan')), 'no plan: plan select scrolled into view');
+    eq($('fill-status').textContent, FILL_OK, 'first read after reset says Filled');
     ok($('calc-btn').classList.contains('secondary'), 'Get project stays secondary without a plan');
     eq(primaries(), '', 'no plan yet: zero primaries, focus on the plan select');
     ok($('fill-usage-btn').classList.contains('secondary'), 'Fill demoted after a successful Fill');
@@ -494,6 +534,7 @@
     W.QP.app.clearAll();
     eq(primaries(), 'fill-usage-btn', 'clearAll restores Fill');
     ok($('calc-btn').classList.contains('secondary'), 'clearAll keeps Get project secondary');
+    instantScroll(false);
     removeUsageBridge();
   });
 

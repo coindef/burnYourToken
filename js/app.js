@@ -555,6 +555,7 @@
   // Fill from Claude Usage. Copy is the UX lock; one click only writes step 1 fields.
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
+  const FILL_AGAIN = 'Updated from Usage.'; // 2nd+ successful read, so Fill again visibly responds
   const FILL_NO_EXT = 'Extension not found. Load it from the README, or type the numbers.';
   const README_INSTALL = 'README.md#load-unpacked-30-seconds';
   const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
@@ -562,6 +563,7 @@
   let fillGen = 0;
   let fillTimer = 0;
   let applyingFill = false;
+  let fillReads = 0; // successful reads since load / Clear
 
   function showFillStatus(kind, text) {
     if (fillTimer) { clearTimeout(fillTimer); fillTimer = 0; }
@@ -708,13 +710,18 @@
     state.usageReady = true;
     state.filled = true;
     syncOnboarding();
-    showFillStatus('ok', FILL_OK);
+    fillReads += 1;
+    showFillStatus('ok', fillReads > 1 ? FILL_AGAIN : FILL_OK);
     promoteAfterFill();
-    (planChosen() ? $('calc-btn') : $('claude-plan')).focus({ preventScroll: true });
+    // The next control is often below the fold; bring it into view, then focus it.
+    const next = planChosen() ? $('calc-btn') : $('claude-plan');
+    next.scrollIntoView({ block: 'nearest' });
+    next.focus({ preventScroll: true });
   }
 
   function clearAll() {
     fillGen += 1;
+    fillReads = 0;
     showFillStatus('', '');
     try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* 没存过 */ }
     $('calc-form').reset();
