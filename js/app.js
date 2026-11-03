@@ -714,9 +714,12 @@
     showFillStatus('ok', fillReads > 1 ? FILL_AGAIN : FILL_OK);
     promoteAfterFill();
     // The next control is often below the fold; bring it into view, then focus it.
+    // Scroll after this frame's layout settles (Fill again collapses the banner and results).
     const next = planChosen() ? $('calc-btn') : $('claude-plan');
-    next.scrollIntoView({ block: 'nearest' });
     next.focus({ preventScroll: true });
+    const bring = () => { if (gen === fillGen) next.scrollIntoView({ block: 'center' }); };
+    bring();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(bring);
   }
 
   function clearAll() {
@@ -787,6 +790,8 @@
     $('recalc-btn').addEventListener('click', goRecalc);
 
     restore();
+    // index.html marks both Fill buttons primary; pick one so a reload in the done state keeps one primary.
+    setPrimary(state.stale ? 'again' : 'fill');
     renderResults();
     renderRecs();
   }

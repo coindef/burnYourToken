@@ -289,7 +289,7 @@
     frame.style.width = '';
   });
 
-  test('Resets in stays one row (In [h] hr [m] min) on mobile and desktop; slots 1 and 3 unchanged', async () => {
+  test('Resets in stays one row (In [h] hr [m] min) on mobile, tablet (720), and desktop; slots 1 and 3 unchanged', async () => {
     await fresh();
     $('example-btn').click();
     await wait(50);
@@ -305,6 +305,7 @@
       ok(D.documentElement.scrollWidth <= W.innerWidth + 1, width + ' no horizontal scroll');
     }
     await oneRow(390);
+    await oneRow(720);
     await oneRow(1280);
     frame.style.width = '';
   });
@@ -473,69 +474,117 @@
     const usage = fixtureUsage();
     eq(usage.plan, 'pro', 'fixture shows Pro');
 
-    // Path A: plan read from Usage
+    try {
+      // Path A: plan read from Usage
+      await fresh();
+      eq(primaries(), 'fill-usage-btn', 'first screen: Fill is the one primary');
+      installUsageBridge(() => ({ ok: true, usage: usage }));
+      instantScroll(true);
+      W.scrollTo(0, 0);
+      $('fill-usage-btn').click();
+      await flushFill();
+      eq($('claude-plan').value, 'pro', 'plan set from Usage');
+      eq(primaries(), 'calc-btn', 'plan read: Get project is the one primary');
+      eq(D.activeElement && D.activeElement.id, 'calc-btn', 'focus on Get project');
+      ok(inViewport($('calc-btn')), 'plan read: Get project scrolled into view');
+      calc();
+      eq(cards().length, 1, 'one card');
+      eq(primaries(), 'calc-btn', 'after Get project: still one primary');
+      cards()[0].querySelector('.done-btn').click();
+      eq(primaries(), 'recalc-btn', 'after Mark done: Fill again is the one primary');
+      eq(text($('done-line')).trim(), 'Nice. Fill again when you\u2019re ready.', 'done line text');
+      eq($('done-line').childNodes.length, 1, 'done line is one text node');
+      ok(!/\u2019\s|\s\u2019/.test(text($('done-line'))), 'no whitespace around the apostrophe');
+      const probe = D.createElement('span');
+      probe.textContent = '\u2019';
+      $('done-line').appendChild(probe);
+      const emRatio = probe.getBoundingClientRect().width / parseFloat(W.getComputedStyle(probe).fontSize);
+      probe.remove();
+      ok(emRatio < 0.5, 'apostrophe is not a full-width CJK glyph (' + emRatio.toFixed(2) + 'em)');
+      ok(!$('stale-warn') || !isShown($('stale-warn')), 'no stale warning while Fill again banner shows');
+      ok(!$('done-banner').hidden, 'banner visible');
+      ok($('calc-btn').classList.contains('secondary'), 'Get project back to secondary after Mark done');
+      $('recalc-btn').click();
+      await flushFill();
+      eq(primaries(), 'calc-btn', 'Fill again succeeded with a plan: Get project is primary again');
+      eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Fill again: focus on Get project');
+      ok(inViewport($('calc-btn')), 'Fill again: Get project in view');
+      eq($('fill-status').textContent, FILL_AGAIN, 'Fill again says Updated from Usage.');
+
+      // Path B: plan not on the page
+      await fresh();
+      const noPlan = Object.assign({}, usage, { plan: '' });
+      installUsageBridge(() => ({ ok: true, usage: noPlan }));
+      instantScroll(true);
+      W.scrollTo(0, 0);
+      $('fill-usage-btn').click();
+      await flushFill();
+      eq($('claude-plan').value, '', 'plan left blank, no guess');
+      eq(D.activeElement && D.activeElement.id, 'claude-plan', 'focus on the plan select');
+      ok(inViewport($('claude-plan')), 'no plan: plan select scrolled into view');
+      eq($('fill-status').textContent, FILL_OK, 'first read after reset says Filled');
+      ok($('calc-btn').classList.contains('secondary'), 'Get project stays secondary without a plan');
+      eq(primaries(), '', 'no plan yet: zero primaries, focus on the plan select');
+      ok($('fill-usage-btn').classList.contains('secondary'), 'Fill demoted after a successful Fill');
+      setVal('claude-plan', 'max5');
+      eq(primaries(), 'calc-btn', 'plan chosen: Get project promoted, Fill demoted');
+      setVal('claude-plan', '');
+      eq(primaries(), '', 'plan cleared: back to zero primaries');
+      setVal('claude-plan', 'max5');
+
+      // Choosing a plan without a successful Fill does not promote Get project
+      W.QP.app.clearAll();
+      eq(primaries(), 'fill-usage-btn', 'clearAll restores Fill');
+      ok($('calc-btn').classList.contains('secondary'), 'clearAll keeps Get project secondary');
+    } finally {
+      instantScroll(false);
+      removeUsageBridge();
+    }
+  });
+
+  test('Fill again after Mark done keeps Get project in view (390 and 1280)', async () => {
+    const usage = fixtureUsage();
+    for (const width of [390, 1280]) {
+      await fresh();
+      frame.style.width = width + 'px';
+      await wait(80);
+      installUsageBridge(() => ({ ok: true, usage: usage }));
+      instantScroll(true);
+      try {
+        W.scrollTo(0, 0);
+        $('fill-usage-btn').click();
+        await flushFill();
+        calc();
+        cards()[0].querySelector('.done-btn').click();
+        await wait(50);
+        $('recalc-btn').click();
+        await flushFill();
+        await wait(50);
+        eq(D.activeElement && D.activeElement.id, 'calc-btn', width + ' Fill again: focus on Get project');
+        ok(inViewport($('calc-btn')), width + ' Fill again: Get project fully in view (' + Math.round($('calc-btn').getBoundingClientRect().bottom) + '/' + W.innerHeight + ')');
+      } finally {
+        instantScroll(false);
+        removeUsageBridge();
+        frame.style.width = '';
+      }
+    }
+  });
+
+  test('Reload in the done state keeps exactly one primary: Fill again', async () => {
+    const usage = fixtureUsage();
     await fresh();
-    eq(primaries(), 'fill-usage-btn', 'first screen: Fill is the one primary');
     installUsageBridge(() => ({ ok: true, usage: usage }));
-    instantScroll(true);
-    W.scrollTo(0, 0);
-    $('fill-usage-btn').click();
-    await flushFill();
-    eq($('claude-plan').value, 'pro', 'plan set from Usage');
-    eq(primaries(), 'calc-btn', 'plan read: Get project is the one primary');
-    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'focus on Get project');
-    ok(inViewport($('calc-btn')), 'plan read: Get project scrolled into view');
-    calc();
-    eq(cards().length, 1, 'one card');
-    eq(primaries(), 'calc-btn', 'after Get project: still one primary');
-    cards()[0].querySelector('.done-btn').click();
-    eq(primaries(), 'recalc-btn', 'after Mark done: Fill again is the one primary');
-    eq(text($('done-line')).trim(), 'Nice. Fill again when you\u2019re ready.', 'done line text');
-    eq($('done-line').childNodes.length, 1, 'done line is one text node');
-    ok(!/\u2019\s|\s\u2019/.test(text($('done-line'))), 'no whitespace around the apostrophe');
-    const probe = D.createElement('span');
-    probe.textContent = '\u2019';
-    $('done-line').appendChild(probe);
-    const emRatio = probe.getBoundingClientRect().width / parseFloat(W.getComputedStyle(probe).fontSize);
-    probe.remove();
-    ok(emRatio < 0.5, 'apostrophe is not a full-width CJK glyph (' + emRatio.toFixed(2) + 'em)');
-    ok(!$('stale-warn') || !isShown($('stale-warn')), 'no stale warning while Fill again banner shows');
-    ok(!$('done-banner').hidden, 'banner visible');
-    ok($('calc-btn').classList.contains('secondary'), 'Get project back to secondary after Mark done');
-    $('recalc-btn').click();
-    await flushFill();
-    eq(primaries(), 'calc-btn', 'Fill again succeeded with a plan: Get project is primary again');
-    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Fill again: focus on Get project');
-    ok(inViewport($('calc-btn')), 'Fill again: Get project in view');
-    eq($('fill-status').textContent, FILL_AGAIN, 'Fill again says Updated from Usage.');
-
-    // Path B: plan not on the page
-    await fresh();
-    const noPlan = Object.assign({}, usage, { plan: '' });
-    installUsageBridge(() => ({ ok: true, usage: noPlan }));
-    instantScroll(true);
-    W.scrollTo(0, 0);
-    $('fill-usage-btn').click();
-    await flushFill();
-    eq($('claude-plan').value, '', 'plan left blank, no guess');
-    eq(D.activeElement && D.activeElement.id, 'claude-plan', 'focus on the plan select');
-    ok(inViewport($('claude-plan')), 'no plan: plan select scrolled into view');
-    eq($('fill-status').textContent, FILL_OK, 'first read after reset says Filled');
-    ok($('calc-btn').classList.contains('secondary'), 'Get project stays secondary without a plan');
-    eq(primaries(), '', 'no plan yet: zero primaries, focus on the plan select');
-    ok($('fill-usage-btn').classList.contains('secondary'), 'Fill demoted after a successful Fill');
-    setVal('claude-plan', 'max5');
-    eq(primaries(), 'calc-btn', 'plan chosen: Get project promoted, Fill demoted');
-    setVal('claude-plan', '');
-    eq(primaries(), '', 'plan cleared: back to zero primaries');
-    setVal('claude-plan', 'max5');
-
-    // Choosing a plan without a successful Fill does not promote Get project
-    W.QP.app.clearAll();
-    eq(primaries(), 'fill-usage-btn', 'clearAll restores Fill');
-    ok($('calc-btn').classList.contains('secondary'), 'clearAll keeps Get project secondary');
-    instantScroll(false);
-    removeUsageBridge();
+    try {
+      $('fill-usage-btn').click();
+      await flushFill();
+      calc();
+      cards()[0].querySelector('.done-btn').click();
+    } finally {
+      removeUsageBridge();
+    }
+    await reloadApp();
+    const primaries = shownButtons().filter(b => b.classList.contains('primary')).map(b => b.id).join();
+    eq(primaries, 'recalc-btn', 'after reload in done state: only Fill again is primary');
   });
 
   test('已用/还剩同时管①和③：标签跟着变，每周和 5 小时用同一种算法', async () => {
