@@ -208,6 +208,14 @@ input[type="radio"], input[type="checkbox"] { width: 18px; height: 18px; accent-
 
 .field { display: block; margin: 10px 0; }
 .field select, .field input[type="time"] { margin-top: 4px; }
+/* Weekly fields: label stacked above the input on mobile, shared label column on desktop. */
+.field.wk .field-label { display: block; margin-bottom: 4px; }
+.field.wk select, .field.wk input[type="time"], .field.wk .pct { margin-top: 0; }
+@media (min-width: 720px) {
+  .field.wk { display: grid; grid-template-columns: 9.5em auto; align-items: center; column-gap: 12px; justify-content: start; }
+  .field.wk .field-label { margin-bottom: 0; }
+  .reset .choice > label { display: inline-block; min-width: 3.2em; }
+}
 
 .services, .copy-grid { display: grid; gap: 12px; }
 

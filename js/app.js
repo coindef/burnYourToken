@@ -98,11 +98,11 @@
       '</div>' +
       '<div class="copy-slot" data-slot="3">' +
       '  <h3><span class="map-mark" aria-hidden="true">③</span> <span class="mode-label" data-used="Weekly — % used" data-left="Weekly — % left">Weekly — % used</span></h3>' +
-      '  <label class="field">Percent' +
+      '  <label class="field wk"><span class="field-label">Percent</span>' +
       '    <span class="pct"><input type="text" inputmode="decimal" id="' + p + '-w-pct" autocomplete="off" placeholder="e.g. 31" aria-label="Weekly percent used" data-used-label="Weekly percent used" data-left-label="Weekly percent left"> %</span>' +
       '  </label>' +
-      '  <label class="field">Weekday <select id="' + p + '-w-day" aria-label="Weekly reset weekday"><option value="">Choose</option>' + days + '</select></label>' +
-      '  <label class="field">Time <input type="time" id="' + p + '-w-clock" aria-label="Weekly reset time"> <span class="hint">optional</span></label>' +
+      '  <label class="field wk"><span class="field-label">Weekday</span> <select id="' + p + '-w-day" aria-label="Weekly reset weekday"><option value="">Choose</option>' + days + '</select></label>' +
+      '  <label class="field wk"><span class="field-label">Time (optional)</span> <input type="time" id="' + p + '-w-clock" aria-label="Weekly reset time (optional)"></label>' +
       '  <p class="hint">If several weekly limits are listed, copy the fullest one.</p>' +
       '</div>';
   }

@@ -208,6 +208,9 @@
     ok(prefs && !prefs.open, 'preferences start closed');
     ok(!isShown(prefs), 'preferences are off the main path');
     eq(prefs.querySelector('summary').textContent.trim(), 'Preferences (optional)');
+    const wkLabels = Array.from(D.querySelectorAll('[data-slot="3"] .field.wk .field-label')).map(n => n.textContent.trim());
+    eq(wkLabels.join('|'), 'Percent|Weekday|Time (optional)', 'weekly labels share one pattern; optional is in the Time label');
+    ok(!D.querySelector('[data-slot="3"] .field .hint'), 'no separate optional line under Time');
     ok($('overflow') && !$('overflow').open, 'overflow starts closed');
     eq(text(D.querySelector('.lead')).trim(), 'Fill from Usage, get one project, Mark done.');
     ok(!D.querySelector('.jump') && !D.querySelector('.loop-line'), 'no jump nav or loop line');
@@ -492,7 +495,7 @@
       eq(primaries(), 'calc-btn', 'after Get project: still one primary');
       cards()[0].querySelector('.done-btn').click();
       eq(primaries(), 'recalc-btn', 'after Mark done: Fill again is the one primary');
-      eq(text($('done-line')).trim(), 'Nice. Fill again when you\u2019re ready.', 'done line text');
+      eq(text($('done-line')).trim(), 'Marked done. Fill again after your next session.', 'done line text');
       eq($('done-line').childNodes.length, 1, 'done line is one text node');
       ok(!/\u2019\s|\s\u2019/.test(text($('done-line'))), 'no whitespace around the apostrophe');
       const probe = D.createElement('span');
@@ -866,7 +869,7 @@
       done.push(c.dataset.id);
       c.querySelector('.done-btn').click();
       ok(!$('done-banner').hidden, '出现「做完了」');
-      ok(text($('done-banner')).indexOf('Nice. Fill again when you’re ready.') !== -1, text($('done-banner')));
+      ok(text($('done-banner')).indexOf('Marked done. Fill again after your next session.') !== -1, text($('done-banner')));
       eq($('recalc-btn').textContent.trim(), 'Fill again');
       eq(cards().length, 0, '重新算之前不推');
     }
@@ -907,7 +910,7 @@
     const doneId = first.dataset.id;
     first.querySelector('.done-btn').click();
     ok(!$('done-banner').hidden, '出现「做完了」提示');
-    ok(text($('done-banner')).indexOf('Fill again when you’re ready.') !== -1, '提示再 Fill 一次');
+    ok(text($('done-banner')).indexOf('Fill again after your next session.') !== -1, '提示再 Fill 一次');
     eq(cards().length, 0, '重新算之前不推下一个');
     ok(!$('done-banner').hidden && !$('recs').hidden, 'Fill again banner visible');
     ok($('stale-warn') && $('stale-warn').hidden, 'stale warning hidden while the banner is visible');
@@ -1071,7 +1074,7 @@
     ok(D.querySelector('input[name="q-output"][value="fun"]').checked, '成果带回');
     ok(D.querySelector('input[name="q-audience"][value="self"]').checked, '给谁带回');
     ok(!$('restore-note').hidden, '提示对照用量页再算');
-    eq(text($('restore-note')).trim(), 'Restored from this tab. Check Usage, then Get project.', 'restore hint copy');
+    eq(text($('restore-note')).trim(), 'Fields restored. Get project to see it again.', 'restore hint copy');
     W.QP.app.clearAll();
     await reloadApp();
     eq($('claude-plan').value, '', '清除后没有带回');
