@@ -934,13 +934,42 @@
     $('recalc-btn').click();
     eq(D.activeElement && D.activeElement.id, 'fill-usage-btn', 'Fill again 回到 Fill 按钮');
     eq($('fill-status').textContent, 'Reading Usage…', 'Fill again 直接触发 Fill');
-    setVal('claude-s-pct', '60'); // 做完项目用掉了一些：剩 40% → 中档
+    ok($('done-banner').hidden, 'Fill again 先收起「做完了」提示');
+    eq($('claude-s-pct').value, '', 'Fill again 清掉旧数字');
+    fill('claude', { s: 60, w: 40 }); // 做完项目用掉了一些：剩 40% → 中档
     calc();
     ok($('done-banner').hidden, '提示消失');
     eq(resultOf('claude').dataset.band, 'medium', '新档位');
     ok(cards().length > 0, '推了下一批');
     ok(cards().every(c => c.dataset.id !== doneId && c.dataset.band === 'medium'), '没有做完的，档位跟着新剩余');
     ok(statusText().indexOf('Finished 1 this round') !== -1, '记着做完了几个');
+  });
+
+  test('Fill again after Mark done (#21): clears done state and old numbers, keeps plan, one status at a time', async () => {
+    await fresh();
+    fill('claude', { s: 30, w: 40 });
+    calc();
+    const planBefore = $('claude-plan').value;
+    ok(planBefore !== '', 'a plan is chosen');
+    cards()[0].querySelector('.done-btn').click();
+    ok(!$('done-banner').hidden, 'Marked done banner shows');
+    $('recalc-btn').click();
+    ok($('done-banner').hidden, 'Fill again hides the Marked done banner');
+    ok(!W.QP.app.state.stale, 'done state cleared');
+    eq($('claude-s-pct').value, '', 'old Session % cleared');
+    eq($('claude-w-pct').value, '', 'old Weekly % cleared');
+    eq($('claude-plan').value, planBefore, 'plan kept');
+    eq(text($('calc-results')).trim(), '', 'old result cleared');
+    await wait(1700);
+    eq($('fill-status').textContent, FILL_NO_EXT, 'no extension message');
+    ok($('done-banner').hidden, 'still no Marked done next to the error');
+    const shownMsgs = Array.from(D.querySelectorAll('#done-banner, #fill-status, #stale-warn, #restore-note')).filter(isShown);
+    eq(shownMsgs.length, 1, 'one status message on screen');
+    ok(isShown($('usage-fields')), 'Fill again with no extension opens the manual fields (#23)');
+    ok(isShown($('claude-s-pct')), 'Session % visible to type by hand');
+    ok(isShown($('calc-btn')), 'Get project reachable by hand');
+    eq(D.activeElement, $('claude-s-pct'), 'focus lands on Session %');
+    eq(W.QP.app.state.done.length, 1, 'finished count kept');
   });
 
   test('问卷没有 ChatGPT，也没有服务单选', async () => {
