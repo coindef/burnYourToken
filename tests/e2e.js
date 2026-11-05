@@ -120,7 +120,7 @@
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
   const FILL_AGAIN = 'Updated from Usage.';
-  const FILL_NO_EXT = 'Extension not found. Load it from the README, or type the numbers.';
+  const FILL_NO_EXT = 'No extension? No problem. Type your numbers below, or install it in 30 seconds.';
   const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
 
   function removeUsageBridge() {
@@ -332,12 +332,20 @@
     eq($('fill-status').textContent, FILL_WORKING, 'working');
     await wait(1700);
     eq($('fill-status').textContent, FILL_NO_EXT, 'no extension');
-    const readme = $('fill-status').querySelector('a');
-    ok(readme && readme.getAttribute('href') === 'README.md#load-unpacked-30-seconds' && readme.textContent === 'README', 'links to README install');
+    const links = Array.from($('fill-status').querySelectorAll('a'));
+    const typeLink = links.find(a => a.getAttribute('href') === '#usage-fields');
+    ok(typeLink && typeLink.textContent === 'Type your numbers below', 'links to the manual fields');
+    const readme = links.find(a => a.getAttribute('href') === 'README.md#load-unpacked-30-seconds');
+    ok(readme && readme.textContent === 'install it in 30 seconds', 'links to README install');
+    ok($('fill-status').classList.contains('info'), 'no extension reads as a hint, not an error');
     eq($('claude-s-pct').value, '', 'still empty');
     eq(text($('calc-results')).trim(), '', 'no extension does not calculate');
     eq(D.querySelector('main').dataset.phase, 'first', 'failed Fill stays on the first screen');
-    ok(!isShown($('usage-fields')), 'failed Fill does not reveal fields');
+    ok(isShown($('usage-fields')), 'no extension opens the manual fields');
+    ok(isShown($('claude-s-pct')), 'Session % is visible without opening More');
+    ok(isShown($('calc-btn')), 'Get project is reachable by hand');
+    eq(D.activeElement, $('claude-s-pct'), 'focus lands on Session %');
+    ok(!$('overflow').open, 'More stays closed');
 
     const usage = fixtureUsage();
     let release = null;
