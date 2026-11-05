@@ -35,7 +35,8 @@
     doneTitles: [],
     lastDone: '',
     filled: false, // a Fill succeeded since the last Mark done / Clear
-    usageReady: false // true after Fill succeeds, Try sample, or restored numbers
+    usageReady: false, // true after Fill succeeds, Try sample, or restored numbers
+    manual: false // Fill found no extension: show the fields so people can type by hand
   };
 
   const $ = id => document.getElementById(id);
@@ -484,9 +485,9 @@
     const view = core.onboardingView(phase);
     if (!view) return;
     const fields = $('usage-fields');
-    if (fields) fields.hidden = !view.showPlanAndGrid;
+    if (fields) fields.hidden = !(view.showPlanAndGrid || state.manual);
     const getBtn = $('calc-btn');
-    if (getBtn) getBtn.hidden = !view.showGetProject;
+    if (getBtn) getBtn.hidden = !(view.showGetProject || state.manual);
     const recs = $('recs');
     if (recs) recs.hidden = phase !== 'project' && !state.stale;
     const main = document.querySelector('main');
@@ -556,7 +557,7 @@
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
   const FILL_AGAIN = 'Updated from Usage.'; // 2nd+ successful read, so Fill again visibly responds
-  const FILL_NO_EXT = 'Extension not found. Load it from the README, or type the numbers.';
+  const FILL_NO_EXT = 'No extension? No problem. Type your numbers below, or install it in 30 seconds.';
   const README_INSTALL = 'README.md#load-unpacked-30-seconds';
   const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
   const FILL_TIMEOUT_MS = 1500;
@@ -580,9 +581,12 @@
     node.textContent = text;
     if (text === FILL_NO_EXT) {
       // Point "README" at the install steps. Relative link: the page stays offline.
-      node.textContent = 'Extension not found. Load it from the ';
-      node.appendChild(el('a', { href: README_INSTALL, text: 'README' }));
-      node.appendChild(document.createTextNode(', or type the numbers.'));
+      // Fields are already open and focused, so "Type your numbers below" is plain text;
+      // only the install link points at the README steps.
+      node.textContent = 'No extension? No problem. Type your numbers below';
+      node.appendChild(document.createTextNode(', or '));
+      node.appendChild(el('a', { href: README_INSTALL, text: 'install it in 30 seconds' }));
+      node.appendChild(document.createTextNode('.'));
     }
     if (kind === 'ok') {
       fillTimer = setTimeout(() => {
@@ -692,7 +696,15 @@
     }
     if (gen !== fillGen) return;
     if (!result || result.ok !== true || !result.usage || result.usage.sessionPct == null || result.usage.weeklyPct == null) {
-      showFillStatus('warn', result && result.error === 'no-extension' ? FILL_NO_EXT : FILL_PARSE);
+      if (result && result.error === 'no-extension') {
+        // First-timers without the extension go straight to typing: open the fields, focus Session %.
+        state.manual = true;
+        syncOnboarding();
+        showFillStatus('info', FILL_NO_EXT);
+        focusManual();
+      } else {
+        showFillStatus('warn', FILL_PARSE);
+      }
       return;
     }
     applyingFill = true;
@@ -722,6 +734,13 @@
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(bring);
   }
 
+  function focusManual() {
+    const pct = $('claude-s-pct');
+    if (!pct) return;
+    pct.focus({ preventScroll: true });
+    pct.scrollIntoView({ block: 'center' });
+  }
+
   function clearAll() {
     fillGen += 1;
     fillReads = 0;
@@ -729,7 +748,7 @@
     try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* 没存过 */ }
     $('calc-form').reset();
     $('quiz-form').reset();
-    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false, filled: false });
+    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false, filled: false, manual: false });
     shownServices().forEach(s => { togglePlan(s.id); syncModeLabels(s.id); });
     clearInvalid();
     $('restore-note').hidden = true;

@@ -273,6 +273,7 @@ button {
 .fill-status.working { color: var(--muted); }
 .fill-status.ok { color: var(--ok); }
 .fill-status.warn { color: var(--warn); }
+.fill-status.info { color: inherit; }
 #calc-btn { margin: 0; width: 100%; }
 
 /* ---------- 计算结果 ---------- */
