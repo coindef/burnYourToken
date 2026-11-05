@@ -333,8 +333,7 @@
     await wait(1700);
     eq($('fill-status').textContent, FILL_NO_EXT, 'no extension');
     const links = Array.from($('fill-status').querySelectorAll('a'));
-    const typeLink = links.find(a => a.getAttribute('href') === '#usage-fields');
-    ok(typeLink && typeLink.textContent === 'Type your numbers below', 'links to the manual fields');
+    ok(!links.some(a => a.getAttribute('href') === '#usage-fields'), 'no redundant link to the already-focused fields');
     const readme = links.find(a => a.getAttribute('href') === 'README.md#load-unpacked-30-seconds');
     ok(readme && readme.textContent === 'install it in 30 seconds', 'links to README install');
     ok($('fill-status').classList.contains('info'), 'no extension reads as a hint, not an error');

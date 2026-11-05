@@ -581,11 +581,9 @@
     node.textContent = text;
     if (text === FILL_NO_EXT) {
       // Point "README" at the install steps. Relative link: the page stays offline.
-      // "Type your numbers below" jumps to the fields; the install link points at the README steps.
-      node.textContent = 'No extension? No problem. ';
-      const typeLink = el('a', { href: '#usage-fields', text: 'Type your numbers below' });
-      typeLink.addEventListener('click', e => { e.preventDefault(); focusManual(); });
-      node.appendChild(typeLink);
+      // Fields are already open and focused, so "Type your numbers below" is plain text;
+      // only the install link points at the README steps.
+      node.textContent = 'No extension? No problem. Type your numbers below';
       node.appendChild(document.createTextNode(', or '));
       node.appendChild(el('a', { href: README_INSTALL, text: 'install it in 30 seconds' }));
       node.appendChild(document.createTextNode('.'));
