@@ -521,7 +521,24 @@
   }
 
   // Fill again: back to step 1 and run Fill directly. Get project stays a separate click.
+  // Starts fresh: drops the done banner, old result and old numbers (plan and used/left stay),
+  // so only Fill's own status shows. The finished list stays for "Finished N this round".
   function goRecalc() {
+    state.stale = false;
+    state.computedAt = null;
+    state.results = {};
+    state.edited = false;
+    state.usageReady = false;
+    state.filled = false;
+    ['-s-pct', '-s-h', '-s-m', '-s-clock', '-w-pct', '-w-day', '-w-clock'].forEach(suffix => {
+      const n = $('claude' + suffix);
+      if (n) n.value = '';
+    });
+    clearInvalid();
+    $('restore-note').hidden = true;
+    save();
+    renderResults();
+    renderRecs();
     $('calc').scrollIntoView({ block: 'start' });
     $('fill-usage-btn').focus({ preventScroll: true });
     fillFromUsage();
