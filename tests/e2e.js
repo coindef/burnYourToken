@@ -965,6 +965,10 @@
     ok($('done-banner').hidden, 'still no Marked done next to the error');
     const shownMsgs = Array.from(D.querySelectorAll('#done-banner, #fill-status, #stale-warn, #restore-note')).filter(isShown);
     eq(shownMsgs.length, 1, 'one status message on screen');
+    ok(isShown($('usage-fields')), 'Fill again with no extension opens the manual fields (#23)');
+    ok(isShown($('claude-s-pct')), 'Session % visible to type by hand');
+    ok(isShown($('calc-btn')), 'Get project reachable by hand');
+    eq(D.activeElement, $('claude-s-pct'), 'focus lands on Session %');
     eq(W.QP.app.state.done.length, 1, 'finished count kept');
   });
 
