@@ -258,20 +258,29 @@
     eq($('claude-w-day').value, D.querySelector('.map-block[data-slot="3"]').getAttribute('data-day'), '③ 周几');
     eq($('claude-w-clock').value, D.querySelector('.map-block[data-slot="3"]').getAttribute('data-clock'), '③ 几点');
     ok(D.querySelector('input[name="claude-mode"][value="used"]').checked, '按已经用了填');
-    eq(resultOf('claude').dataset.band, 'medium', '示例一点就算出中档');
+    eq(cards().length, 0, 'Try sample fills only; no card yet');
+    eq(text($('band-chips')).trim(), '', 'no band chips before Get project');
+    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Try sample focuses Get project');
+    ok(isShown($('calc-btn')), 'Get project shown after Try sample');
+    ok($('calc-btn').classList.contains('primary'), 'Get project primary after Try sample');
+    calc();
+    eq(resultOf('claude').dataset.band, 'medium', 'Get project after sample → medium');
     ok(text($('band-chips')).indexOf('Medium') !== -1 && text($('band-chips')).indexOf('About an hour') !== -1, 'band chips');
-    eq(cards().length, 1, 'Try sample 直接出一张推荐');
+    eq(cards().length, 1, 'one hero after Get project');
     eq(D.querySelectorAll('#calc-results .result, #calc-results .card').length, 0, 'results are chips, not a card');
 
     setVal('claude-plan', 'max20');
     $('example-btn').click();
     eq($('claude-plan').value, 'max20', '已经选了档就不改');
+    eq(cards().length, 0, 'Try sample clears prior card; does not re-run Get project');
+    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Try sample after edit focuses Get project');
     setVal('claude-plan', 'api');
     ok($('claude-body').hidden, 'API 先把格子收起来');
     $('example-btn').click();
     eq($('claude-plan').value, 'pro', 'API 用示例时改回 Pro');
     ok(!$('claude-body').hidden, '格子又打开');
     eq($('claude-s-pct').value, '72', '① 还是示例');
+    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'Try sample again focuses Get project');
 
     $('overflow').open = true;
     D.querySelector('details.how-copy').open = true;
@@ -311,6 +320,61 @@
     await oneRow(720);
     await oneRow(1280);
     frame.style.width = '';
+  });
+
+  test('Get project scrolls to the hero and focuses its title; reduced motion jumps', async () => {
+    await fresh();
+    fill('claude', { s: 72, h: 3, m: 12, w: 31 });
+    // Same trick as Fill-scroll checks: virtual time does not finish CSS smooth scrolling.
+    instantScroll(true);
+    calc();
+    const hero = cards()[0];
+    ok(hero && hero.classList.contains('hero'), 'hero rendered');
+    const title = hero.querySelector('h3');
+    ok(title && title.getAttribute('tabindex') === '-1', 'title is focusable');
+    eq(D.activeElement, title, 'focus on the hero title, not the card');
+    ok(title.getBoundingClientRect().top >= -1 && title.getBoundingClientRect().top < W.innerHeight, 'title scrolled into view');
+    instantScroll(false);
+
+    // Reduced motion: app must pass behavior auto (instant jump).
+    await fresh();
+    fill('claude', { s: 72, h: 3, m: 12, w: 31 });
+    const calls = [];
+    const proto = W.Element.prototype;
+    const orig = proto.scrollIntoView;
+    const realMatch = W.matchMedia.bind(W);
+    proto.scrollIntoView = function (opts) {
+      calls.push(opts || {});
+      return orig.call(this, opts);
+    };
+    W.matchMedia = function (q) {
+      if (String(q).indexOf('prefers-reduced-motion') !== -1) {
+        return { matches: true, media: q, addListener: function () {}, removeListener: function () {} };
+      }
+      return realMatch(q);
+    };
+    try {
+      calc();
+      ok(calls.some(o => o.behavior === 'auto'), 'reduced motion uses instant jump');
+      ok(!calls.some(o => o.behavior === 'smooth'), 'reduced motion never smooth-scrolls');
+      eq(D.activeElement, cards()[0].querySelector('h3'), 'title still focused under reduced motion');
+    } finally {
+      proto.scrollIntoView = orig;
+      W.matchMedia = realMatch;
+    }
+  });
+
+  test('Try sample fills fields and focuses Get project without running it', async () => {
+    await fresh();
+    $('example-btn').click();
+    eq(cards().length, 0, 'no hero after Try sample alone');
+    eq(D.activeElement && D.activeElement.id, 'calc-btn', 'focus on Get project');
+    ok($('calc-btn').classList.contains('primary'), 'Get project is primary');
+    if ($('calc-form').requestSubmit) $('calc-form').requestSubmit($('calc-btn'));
+    else calc();
+    await wait(0);
+    eq(cards().length, 1, 'Get project after Try sample yields one hero');
+    eq(D.activeElement, cards()[0].querySelector('h3'), 'after Get project, focus moves to the title');
   });
 
   test('Fill from Claude Usage fills Session, Resets in, and Weekly; Calculate is a separate click', async () => {

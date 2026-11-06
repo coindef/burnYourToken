@@ -108,7 +108,7 @@
       '</div>';
   }
 
-  // Sample numbers, then Get project. This overflow path is the one that calculates; Fill does not.
+  // Sample numbers only. Get project stays a separate click, same as Fill.
   function fillExample() {
     const p = 'claude';
     const block = slot => document.querySelector('.map-block[data-slot="' + slot + '"]');
@@ -129,9 +129,21 @@
     $(p + '-w-day').value = b3.getAttribute('data-day');
     $(p + '-w-clock').value = b3.getAttribute('data-clock');
     clearInvalid();
+    // Back to the filled phase: numbers ready, Get project is the user's next click.
     state.usageReady = true;
+    state.computedAt = null;
+    state.results = {};
+    state.edited = false;
+    state.stale = false;
     $('calc-form').dispatchEvent(new Event('input', { bubbles: true }));
-    calculate();
+    renderResults();
+    renderRecs();
+    syncOnboarding();
+    if (planChosen()) setPrimary('get');
+    const getBtn = $('calc-btn');
+    if (!getBtn) return;
+    getBtn.focus({ preventScroll: true });
+    scrollNodeIntoView(getBtn, 'center');
   }
 
   function togglePlan(p) {
@@ -219,6 +231,35 @@
     save();
     renderResults();
     renderRecs();
+    focusHeroAfterGet();
+  }
+
+  function prefersReducedMotion() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function scrollNodeIntoView(node, block) {
+    if (!node) return;
+    const where = block || 'start';
+    if (prefersReducedMotion()) {
+      node.scrollIntoView({ block: where, behavior: 'auto' });
+    } else {
+      // Same shape as Fill: block only. CSS html { scroll-behavior: smooth } handles motion.
+      node.scrollIntoView({ block: where });
+    }
+  }
+
+  // After Get project: bring the hero into view and put focus on its title (not the whole card).
+  function focusHeroAfterGet() {
+    const title = document.querySelector('#recs-list .card.hero h3');
+    if (!title) return;
+    const card = title.closest('.card') || title;
+    scrollNodeIntoView(card, 'start');
+    title.focus({ preventScroll: true });
   }
 
   // Failures only. A successful band is chips above the hero, never a result card.
@@ -328,7 +369,7 @@
 
   function card(p, hero) {
     return el('article', { class: 'card' + (hero ? ' hero' : '') + ' band-' + p.band, 'data-id': p.id, 'data-band': p.band }, [
-      el('h3', { text: p.title }),
+      el('h3', { text: p.title, tabindex: '-1' }),
       el('p', { class: 'why-line', text: whyLine(p) }),
       el('details', { class: 'steps' }, [
         el('summary', { text: 'Show steps' }),
