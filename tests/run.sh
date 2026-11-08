@@ -130,6 +130,11 @@ echo "== 页面流程测试（tests/e2e.html）=="
 run e2e "http://127.0.0.1:$PORT/tests/e2e.html"
 report e2e tests zero
 
+echo "== 减少动效：真实滚动位置（tests/motion.html）=="
+# Separate Chrome: virtual time does not paint smooth-scroll frames.
+# shellcheck disable=SC2086
+$TIMEOUT python3 "$ROOT/tests/motion_run.py" || FAILED=1
+
 echo "== 直接打开 index.html（http）=="
 run page-http "http://127.0.0.1:$PORT/index.html"
 report page-http page zero

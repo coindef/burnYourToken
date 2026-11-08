@@ -322,10 +322,11 @@
     frame.style.width = '';
   });
 
-  test('Get project scrolls to the hero and focuses its title; reduced motion jumps', async () => {
+  test('Get project scrolls to the hero and focuses its title', async () => {
     await fresh();
     fill('claude', { s: 72, h: 3, m: 12, w: 31 });
     // Same trick as Fill-scroll checks: virtual time does not finish CSS smooth scrolling.
+    // Reduced motion is tests/motion.html, which reads real scroll positions.
     instantScroll(true);
     calc();
     const hero = cards()[0];
@@ -335,33 +336,6 @@
     eq(D.activeElement, title, 'focus on the hero title, not the card');
     ok(title.getBoundingClientRect().top >= -1 && title.getBoundingClientRect().top < W.innerHeight, 'title scrolled into view');
     instantScroll(false);
-
-    // Reduced motion: app must pass behavior auto (instant jump).
-    await fresh();
-    fill('claude', { s: 72, h: 3, m: 12, w: 31 });
-    const calls = [];
-    const proto = W.Element.prototype;
-    const orig = proto.scrollIntoView;
-    const realMatch = W.matchMedia.bind(W);
-    proto.scrollIntoView = function (opts) {
-      calls.push(opts || {});
-      return orig.call(this, opts);
-    };
-    W.matchMedia = function (q) {
-      if (String(q).indexOf('prefers-reduced-motion') !== -1) {
-        return { matches: true, media: q, addListener: function () {}, removeListener: function () {} };
-      }
-      return realMatch(q);
-    };
-    try {
-      calc();
-      ok(calls.some(o => o.behavior === 'auto'), 'reduced motion uses instant jump');
-      ok(!calls.some(o => o.behavior === 'smooth'), 'reduced motion never smooth-scrolls');
-      eq(D.activeElement, cards()[0].querySelector('h3'), 'title still focused under reduced motion');
-    } finally {
-      proto.scrollIntoView = orig;
-      W.matchMedia = realMatch;
-    }
   });
 
   test('Try sample fills fields and focuses Get project without running it', async () => {
