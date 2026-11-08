@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>reduced motion scroll</title>
+  <style>
+    body { font: 14px/1.4 sans-serif; margin: 16px; }
+    /* Short viewport so Get project, Mark done, and Fill again travel far enough to show smoothing. */
+    #app { display: block; width: 420px; height: 480px; border: 0; }
+    .pass { color: #1b6440; } .fail { color: #9b2c2c; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <iframe id="app" title="app"></iframe>
+  <p id="summary">waiting for runner</p>
+  <ol id="out"></ol>
+  <script src="motion.js"></script>
+</body>
+</html>

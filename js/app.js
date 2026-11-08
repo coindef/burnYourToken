@@ -234,23 +234,11 @@
     focusHeroAfterGet();
   }
 
-  function prefersReducedMotion() {
-    try {
-      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-    } catch (e) {
-      return false;
-    }
-  }
-
+  // Motion comes from html { scroll-behavior } in css/style.css, including the
+  // reduced-motion override. behavior:'auto' would still follow that property.
   function scrollNodeIntoView(node, block) {
     if (!node) return;
-    const where = block || 'start';
-    if (prefersReducedMotion()) {
-      node.scrollIntoView({ block: where, behavior: 'auto' });
-    } else {
-      // Same shape as Fill: block only. CSS html { scroll-behavior: smooth } handles motion.
-      node.scrollIntoView({ block: where });
-    }
+    node.scrollIntoView({ block: block || 'start' });
   }
 
   // After Get project: bring the hero into view and put focus on its title (not the whole card).
