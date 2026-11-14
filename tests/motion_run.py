@@ -8,6 +8,11 @@ Exit 2: browser or harness failed before an assertion.
 Preference is emulated with CDP (Emulation.setEmulatedMedia), including a
 toggle with no reload. Virtual time is not used: smooth scrolls must paint
 intermediate positions.
+
+Tab key: motion.js calls window.bytMotionKey('Tab'), a Runtime.addBinding.
+The runner answers each call with Input.dispatchKeyEvent (rawKeyDown, then
+keyUp, key Tab, virtual key code 9), so the browser runs its own sequential
+focus navigation. The page waits for the keyup, then checks where focus went.
 """
 import base64
 import json
@@ -86,6 +91,10 @@ class Cdp:
             raise ConnectionError('websocket upgrade failed: ' + resp[:200].decode('utf-8', 'replace'))
         self._id = 0
         self.events = []
+        # Event method -> handler(message). Handlers run while call() waits for its reply.
+        self.handlers = {}
+        # Errors in replies to send() commands, which nobody waits for.
+        self.async_errors = []
 
     def _send_frame(self, text):
         payload = text.encode()
@@ -127,20 +136,34 @@ class Cdp:
                 return data.decode()
             # ignore other control frames
 
-    def call(self, method, params=None, session_id=None):
+    def send(self, method, params=None, session_id=None):
+        """Send a command without waiting for its reply. Returns its id."""
         self._id += 1
         msg = {'id': self._id, 'method': method, 'params': params or {}}
         if session_id:
             msg['sessionId'] = session_id
         self._send_frame(json.dumps(msg))
+        return self._id
+
+    def call(self, method, params=None, session_id=None):
+        # Keep our own id: a handler may send() more commands while this waits.
+        my_id = self.send(method, params, session_id)
         while True:
             incoming = json.loads(self._read_frame())
-            if incoming.get('id') == self._id:
+            if incoming.get('id') == my_id:
                 if 'error' in incoming:
                     raise RuntimeError(method + ' ' + json.dumps(incoming['error']))
                 return incoming.get('result') or {}
+            if 'id' in incoming:
+                if 'error' in incoming:
+                    self.async_errors.append(json.dumps(incoming['error']))
+                continue
             if 'method' in incoming:
-                self.events.append(incoming)
+                handler = self.handlers.get(incoming['method'])
+                if handler:
+                    handler(incoming)
+                else:
+                    self.events.append(incoming)
 
 
 def wait_version(port):
@@ -207,6 +230,25 @@ def main():
         created = cdp.call('Target.createTarget', {'url': 'about:blank'})
         attached = cdp.call('Target.attachToTarget', {'targetId': created['targetId'], 'flatten': True})
         session = attached['sessionId']
+        tab_presses = []
+
+        def on_binding(message):
+            # motion.js asked for a real Tab key: send it as browser input, not a DOM event.
+            params = message.get('params') or {}
+            if params.get('name') != 'bytMotionKey' or params.get('payload') != 'Tab':
+                return
+            for kind in ('rawKeyDown', 'keyUp'):
+                cdp.send('Input.dispatchKeyEvent', {
+                    'type': kind, 'key': 'Tab', 'code': 'Tab',
+                    'windowsVirtualKeyCode': 9, 'nativeVirtualKeyCode': 9,
+                }, message.get('sessionId') or session)
+            tab_presses.append(params.get('payload'))
+
+        cdp.handlers['Runtime.bindingCalled'] = on_binding
+        # The binding reaches contexts created later (each navigation below) only while
+        # Runtime is enabled.
+        cdp.call('Runtime.enable', {}, session)
+        cdp.call('Runtime.addBinding', {'name': 'bytMotionKey'}, session)
 
         def emul(value):
             features = [{'name': 'prefers-reduced-motion', 'value': value}] if value else []
@@ -239,6 +281,9 @@ def main():
             media = payload.get('media') or {}
             print('== %s expect=%s matchMedia.reduce=%s css=%s ==' % (
                 label, expect, media.get('reduce'), media.get('css')))
+            if payload.get('mediaProblems'):
+                failed = True
+                print('  FAIL media: ' + '; '.join(payload['mediaProblems']))
             for row in payload.get('rows') or []:
                 flag = 'PASS' if row.get('ok') else 'FAIL'
                 if not row.get('ok'):
@@ -248,8 +293,13 @@ def main():
                     row.get('placeOk'), row.get('before'), row.get('afterCalls'),
                     row.get('end'), row.get('travel'), row.get('frames'),
                     json.dumps(row.get('uniq'))))
+                print('       held=%s (settled %s, %s frames later %s, scrollIntoView alone %s) tab=%s expected=%s' % (
+                    row.get('held'), row.get('settledTop'), row.get('holdFrames'), row.get('heldTop'),
+                    row.get('restTop'), row.get('tabActual'), row.get('tabExpected')))
                 if row.get('problems'):
                     print('       ' + '; '.join(row['problems']))
+            if not payload.get('ok'):
+                failed = True
 
         # Fresh load, preference off, then on.
         run('load preference off', None, 'smooth', True)
@@ -258,6 +308,10 @@ def main():
         run('dynamic start off', None, 'smooth', True)
         run('dynamic to reduce', 'reduce', 'instant', False)
         run('dynamic back off', None, 'smooth', False)
+        print('Tab keys sent with Input.dispatchKeyEvent: %d' % len(tab_presses))
+        if cdp.async_errors:
+            failed = True
+            print('FAIL CDP command errors: ' + '; '.join(cdp.async_errors[:5]))
     except Exception as exc:
         return infra(str(exc))
     finally:

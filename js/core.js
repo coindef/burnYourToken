@@ -478,6 +478,19 @@
     };
   }
 
+  // Scroll motion for the page's own scrolls: 'auto' (an instant jump) when the user asks for
+  // reduced motion, 'smooth' otherwise. Asks win.matchMedia on every call, so a change in the
+  // middle of a session applies to the next scroll. No matchMedia, or one that fails, counts
+  // as no preference.
+  function scrollBehaviorFor(win) {
+    let reduce = false;
+    try {
+      const mq = win && typeof win.matchMedia === 'function' ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      reduce = !!(mq && mq.matches);
+    } catch (e) { /* no usable matchMedia: no preference */ }
+    return reduce ? 'auto' : 'smooth';
+  }
+
   QP.core = {
     BANDS: BANDS, BAND_INFO: BAND_INFO, RULES: RULES, WEEKDAYS: WEEKDAYS, WINDOW_NAME: WINDOW_NAME, WEIGHTS: WEIGHTS,
     rank: rank, bandFromRemaining: bandFromRemaining, weeklyTimeCap: weeklyTimeCap,
@@ -486,6 +499,6 @@
     formatHours: formatHours, formatUntil: formatUntil,
     computeService: computeService,
     domainLabel: domainLabel, customProject: customProject, recommend: recommend,
-    onboardingView: onboardingView
+    onboardingView: onboardingView, scrollBehaviorFor: scrollBehaviorFor
   };
 })();
