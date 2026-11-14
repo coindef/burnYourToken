@@ -34,6 +34,7 @@ Star the repo if the Fill→Mark done loop helped.
 - **Fill** reads the open Usage tab only when you click **Fill from Claude Usage**. It copies **Session**, **Resets in**, and **Weekly**. It does not calculate, and it does not mark a project done.
 - **One** full-width recommendation. **Get project** is the click that shows it. The main path does not add a second card.
 - **Mark done** is explicit. The project stays unfinished until you click it.
+- **Copy for Claude** on the card copies the project as plain text (title, what you’ll end with, steps, done when) to paste into Claude. Copying does not mark it done.
 
 *Usage monitors show leftover quota. burnYourToken fills IDLE / UNUSED into one pick, then Mark done — nothing auto-burns.*
 

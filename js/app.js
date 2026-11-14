@@ -347,7 +347,7 @@
 
   // ---------------- 第 3 步：推荐卡片 ----------------
 
-  // 一张项目卡：标题、一行为什么、收起的步骤、Mark done。
+  // One project card: title, a one-line why, folded steps, then Copy for Claude and Mark done.
   function whyLine(p) {
     const why = p.why || { band: '', matches: [], summary: '' };
     if (why.matches && why.matches.length) return why.matches.join(' ');
@@ -355,7 +355,100 @@
     return why.band || '';
   }
 
+  // Copy for Claude: copies core.projectClipboardText(p); the label says Copied for 2s and the
+  // live region says it once per click. No clipboard, or a refused write: a read-only textarea
+  // under the buttons holds the text, all selected, with the ⌘C / Ctrl+C hint. Never saves,
+  // scrolls, or marks anything done. renderRecs may redraw the card while a write is pending
+  // or a timer runs; late callbacks find their nodes detached and leave them alone.
+  const COPY_LABEL = 'Copy for Claude';
+  const COPY_DONE = 'Copied. Paste it into Claude.';
+  const COPY_HINT = 'Press ⌘C / Ctrl+C';
+  const COPY_RESET_MS = 2000;
+  const COPY_SAY_MS = 100; // the live region is emptied first, so repeated words are read again
+  let copyHintIds = 0;
+
+  function copyParts(p) {
+    const button = el('button', { type: 'button', class: 'secondary copy-btn', text: COPY_LABEL });
+    const fallback = el('div', { class: 'copy-fallback' });
+    fallback.hidden = true;
+    const live = el('p', { class: 'visually-hidden', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    let area = null; // made on the first failed copy, then reused
+    let clicks = 0;
+    let resetTimer = 0;
+    let sayTimer = 0;
+
+    function setLabel(text) {
+      if (button.textContent !== text) button.textContent = text;
+    }
+
+    function say(text) {
+      clearTimeout(sayTimer);
+      live.textContent = '';
+      sayTimer = setTimeout(() => {
+        sayTimer = 0;
+        if (live.isConnected) live.textContent = text;
+      }, COPY_SAY_MS);
+    }
+
+    function copied() {
+      // Safari does not focus a clicked button, so focus may still be in the textarea.
+      if (fallback.contains(document.activeElement)) button.focus({ preventScroll: true });
+      fallback.hidden = true;
+      setLabel(COPY_DONE);
+      clearTimeout(resetTimer); // a second click starts the 2s again
+      resetTimer = setTimeout(() => {
+        resetTimer = 0;
+        if (!button.isConnected) return;
+        setLabel(COPY_LABEL);
+        clearTimeout(sayTimer);
+        sayTimer = 0;
+        live.textContent = '';
+      }, COPY_RESET_MS);
+      say(COPY_DONE);
+    }
+
+    function showFallback(text) {
+      clearTimeout(resetTimer);
+      resetTimer = 0;
+      setLabel(COPY_LABEL);
+      if (!area) {
+        const hintId = 'copy-hint-' + (++copyHintIds);
+        area = el('textarea', { readonly: 'readonly', rows: '6', 'aria-label': 'Text for Claude', 'aria-describedby': hintId });
+        fallback.appendChild(area);
+        fallback.appendChild(el('p', { class: 'hint', id: hintId, text: COPY_HINT }));
+      }
+      fallback.hidden = false;
+      area.value = text;
+      // preventScroll: the textarea can open below the fold; the page stays where it is.
+      area.focus({ preventScroll: true });
+      area.setSelectionRange(0, area.value.length);
+      say(COPY_HINT);
+    }
+
+    button.addEventListener('click', () => {
+      const text = core.projectClipboardText(p);
+      const click = ++clicks;
+      const settle = ok => {
+        if (click !== clicks || !button.isConnected) return; // a newer click, or the card was re-drawn
+        if (ok) copied();
+        else showFallback(text);
+      };
+      let write = null;
+      try {
+        const clip = navigator.clipboard;
+        if (clip && typeof clip.writeText === 'function') write = clip.writeText(text);
+      } catch (e) {
+        write = null;
+      }
+      if (write && typeof write.then === 'function') write.then(() => settle(true), () => settle(false));
+      else settle(false);
+    });
+
+    return { button: button, fallback: fallback, live: live };
+  }
+
   function card(p, hero) {
+    const copy = copyParts(p);
     return el('article', { class: 'card' + (hero ? ' hero' : '') + ' band-' + p.band, 'data-id': p.id, 'data-band': p.band }, [
       el('h3', { text: p.title, tabindex: '-1' }),
       el('p', { class: 'why-line', text: whyLine(p) }),
@@ -363,7 +456,12 @@
         el('summary', { text: 'Show steps' }),
         el('ol', null, (p.steps || []).map(t => el('li', { text: t })))
       ]),
-      el('button', { type: 'button', class: 'done-btn', text: 'Mark done', onclick: () => markDone(p) })
+      el('div', { class: 'card-actions' }, [
+        copy.button,
+        el('button', { type: 'button', class: 'done-btn', text: 'Mark done', onclick: () => markDone(p) })
+      ]),
+      copy.fallback,
+      copy.live
     ]);
   }
 

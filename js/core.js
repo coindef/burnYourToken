@@ -449,6 +449,35 @@
     return { cards: cards, others: others, smaller: smaller, fallback: fallback, personalized: prefs.personalized };
   }
 
+  // Copy for Claude: the plain text a card's button copies, with no markdown. Built from the
+  // project object the card shows, so catalog projects and customProject cards read the same;
+  // the why that recommend() attaches is left out. Runs of whitespace close up the way the card
+  // shows them. Blank steps are skipped; with no steps there is no Steps block, and an empty
+  // title, output or done drops its line.
+  //   <title>
+  //
+  //   What you'll end with: <output>
+  //
+  //   Steps:
+  //   1. <step 1>
+  //   2. <step 2>
+  //
+  //   Done when: <done>
+  function projectClipboardText(p) {
+    const clean = v => (v == null ? '' : String(v)).replace(/\s+/g, ' ').trim();
+    const project = p || {};
+    const title = clean(project.title);
+    const output = clean(project.output);
+    const steps = (Array.isArray(project.steps) ? project.steps : []).map(clean).filter(Boolean);
+    const done = clean(project.done);
+    const blocks = [];
+    if (title) blocks.push(title);
+    if (output) blocks.push("What you'll end with: " + output);
+    if (steps.length) blocks.push('Steps:\n' + steps.map((s, i) => (i + 1) + '. ' + s).join('\n'));
+    if (done) blocks.push('Done when: ' + done);
+    return blocks.join('\n\n');
+  }
+
   // First-visit Fill path. The page applies this; it does not auto-run Get project or Mark done.
   //   first   — before a successful Fill (or sample / restored numbers)
   //   filled  — numbers are in; the user has not clicked Get project
@@ -499,6 +528,7 @@
     formatHours: formatHours, formatUntil: formatUntil,
     computeService: computeService,
     domainLabel: domainLabel, customProject: customProject, recommend: recommend,
+    projectClipboardText: projectClipboardText,
     onboardingView: onboardingView, scrollBehaviorFor: scrollBehaviorFor
   };
 })();

@@ -205,7 +205,7 @@ input[type="text"], input[type="time"], select {
   max-width: 100%;
 }
 input[type="text"] { width: 100%; }
-input:focus, select:focus, button:focus, summary:focus, a:focus {
+input:focus, select:focus, textarea:focus, button:focus, summary:focus, a:focus {
   outline: 3px solid #7fb8a6;
   outline-offset: 2px;
 }
@@ -435,6 +435,26 @@ button {
 #recs-title:focus { outline: none; }
 .done-btn { background: var(--accent); border: 1px solid var(--accent); color: #fff; font-weight: 600; width: 100%; }
 .done-btn:hover { background: var(--accent-dark); }
+/* Copy for Claude (secondary) left of Mark done when both fit, above it on narrow cards.
+   Equal shares: Mark done stays the filled primary; a longer label wraps inside its button. */
+.card-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.card-actions button { flex: 1 1 10.5em; margin: 0; }
+.copy-fallback { margin-top: 10px; }
+.copy-fallback textarea {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 16px; /* below 16px, iPhone zooms the page on focus */
+  line-height: 1.5;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid #b9b2a4;
+  border-radius: 8px;
+  resize: vertical;
+}
+.copy-fallback .hint { margin: 6px 0 0; }
 
 .done-banner {
   margin: 10px 0 14px;
