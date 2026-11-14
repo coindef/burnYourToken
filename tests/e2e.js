@@ -1404,6 +1404,452 @@
     ok($('restore-note').hidden, '没有提示');
   });
 
+  // ---------------- Copy for Claude (#27) ----------------
+
+  const COPY_LABEL = 'Copy for Claude';
+  const COPY_OK = 'Copied. Paste it into Claude.';
+  const COPY_HINT = 'Press ⌘C / Ctrl+C';
+
+  // The issue's plain-text format, written out here so these checks do not reuse core.
+  function copyText(p) {
+    return p.title + '\n\n' + 'What you\'ll end with: ' + p.output + '\n\n' + 'Steps:\n' +
+      p.steps.map((s, i) => (i + 1) + '. ' + s).join('\n') + '\n\n' + 'Done when: ' + p.done;
+  }
+
+  // Puts clip where the app iframe reads navigator.clipboard (undefined: no clipboard at all).
+  // Returns a function that brings back the browser's own.
+  function setClipboard(clip) {
+    const nav = W.navigator;
+    Object.defineProperty(nav, 'clipboard', { configurable: true, get: () => clip });
+    return () => { delete nav.clipboard; };
+  }
+  // A clipboard whose writeText records each text and returns clip.reply(); swap reply to
+  // change how the next write ends.
+  function fakeClipboard(reply) {
+    const clip = { writes: [], reply: reply };
+    clip.writeText = t => {
+      clip.writes.push(t);
+      return clip.reply(t);
+    };
+    return clip;
+  }
+  const writeOk = () => W.Promise.resolve();
+  const writeDenied = () => W.Promise.reject(new W.DOMException('Write permission denied.', 'NotAllowedError'));
+
+  const copyBtnOf = c => c.querySelector('.copy-btn');
+  const liveOf = c => c.querySelector('[aria-live="polite"]');
+  const shownAreas = c => Array.from(c.querySelectorAll('textarea')).filter(isShown);
+  const projectOf = c => W.QP.PROJECTS.find(p => p.id === c.dataset.id);
+
+  // Every change of node's text, in order. A live region cleared and then given the same
+  // words again shows up twice: that is what makes a screen reader say it again.
+  function watchText(node) {
+    let last = node.textContent;
+    const seen = [];
+    const mo = new W.MutationObserver(() => {
+      const now = node.textContent;
+      if (now !== last) seen.push(now);
+      last = now;
+    });
+    mo.observe(node, { childList: true, characterData: true, subtree: true });
+    return { seen: seen, stop: () => mo.disconnect() };
+  }
+
+  // What Copy must leave alone: app state, what the tab saved, the step 1 and quiz fields,
+  // the phase, the done banner, which cards are drawn, and the scroll position.
+  function untouched() {
+    return JSON.stringify({
+      state: W.QP.app.state,
+      saved: W.sessionStorage.getItem('qp-v0'),
+      fields: Array.from(D.querySelectorAll('#calc-form input, #calc-form select, #quiz-form input'))
+        .map(n => (n.type === 'radio' || n.type === 'checkbox' ? n.checked : n.value)),
+      phase: D.querySelector('main').dataset.phase,
+      banner: $('done-banner').hidden,
+      cards: cards().concat(moreCards()).map(c => c.dataset.id),
+      scroll: W.scrollY
+    });
+  }
+
+  // A hero from typed numbers (Medium by default). Call with instantScroll(true) on, so the
+  // scroll Get project makes lands at once.
+  async function heroForCopy(o) {
+    await fresh();
+    fill('claude', o || { s: 72, h: 3, m: 12, w: 31 });
+    calc();
+    await wait(0);
+    const hero = cards()[0];
+    ok(hero && hero.classList.contains('hero'), 'hero rendered');
+    return hero;
+  }
+
+  test('Copy for Claude: on the hero after Get project, before Mark done (left of it, or above it on narrow screens); secondary, Mark done keeps its primary style; native button; Tab goes on to Mark done; visible focus ring', async () => {
+    instantScroll(true);
+    try {
+      await fresh();
+      eq(D.querySelectorAll('.copy-btn').length, 0, 'no Copy for Claude before Get project');
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      const done = hero.querySelector('.done-btn');
+      ok(copy && isShown(copy), 'Copy for Claude shows on the hero');
+      eq(copy.textContent, COPY_LABEL, 'label');
+      eq(Array.from(hero.querySelectorAll('button')).map(b => b.textContent.trim()).join(' | '), 'Copy for Claude | Mark done', 'order in the card');
+      eq(copy.tagName + ' type=' + copy.getAttribute('type'), 'BUTTON type=button', 'native button');
+      ok(copy.classList.contains('secondary') && !copy.classList.contains('primary') && !copy.classList.contains('done-btn'), 'secondary: ' + copy.className);
+      eq(done.className, 'done-btn', 'Mark done keeps .done-btn');
+      eq(hero.querySelectorAll('.primary').length, 0, 'no .primary in the card: Mark done is the card\'s primary');
+      const cs = W.getComputedStyle(copy);
+      const ds = W.getComputedStyle(done);
+      eq(ds.backgroundColor, 'rgb(43, 106, 87)', 'Mark done keeps the accent fill');
+      eq(ds.color, 'rgb(255, 255, 255)', 'Mark done keeps white text');
+      eq(cs.backgroundColor, 'rgb(255, 255, 255)', 'Copy for Claude is a white secondary button');
+      ok(Number(cs.fontWeight) < Number(ds.fontWeight), 'Mark done is bolder (' + ds.fontWeight + ' vs ' + cs.fontWeight + ')');
+
+      ok(!Array.from(D.querySelectorAll('[tabindex]')).some(n => n.tabIndex > 0), 'no positive tabindex: Tab follows page order');
+      const stops = Array.from(D.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]'))
+        .filter(n => n.tabIndex >= 0 && !n.disabled && isShown(n));
+      ok(stops.indexOf(copy) !== -1, 'Copy for Claude is a Tab stop');
+      eq(stops[stops.indexOf(copy) + 1], done, 'the Tab stop after Copy for Claude is Mark done');
+
+      copy.focus({ preventScroll: true });
+      eq(D.activeElement, copy, 'focusable');
+      const ring = W.getComputedStyle(copy);
+      ok(ring.outlineStyle === 'solid' && parseFloat(ring.outlineWidth) >= 2 && ring.outlineColor !== 'rgba(0, 0, 0, 0)',
+        'visible focus ring: ' + ring.outlineStyle + ' ' + ring.outlineWidth + ' ' + ring.outlineColor);
+      copy.blur();
+
+      // Each label on one line; side by side when there is room; never past the card.
+      async function layout(width) {
+        frame.style.width = width + 'px';
+        await wait(80);
+        const c = cards()[0];
+        const btn = copyBtnOf(c);
+        const a = btn.getBoundingClientRect();
+        const b = c.querySelector('.done-btn').getBoundingClientRect();
+        const box = c.getBoundingClientRect();
+        const label = D.createRange();
+        label.selectNodeContents(btn);
+        eq(label.getClientRects().length, 1, width + 'px: Copy for Claude fits on one line');
+        ok(a.left >= box.left - 0.5 && Math.max(a.right, b.right) <= box.right + 0.5, width + 'px: both buttons inside the card');
+        ok(D.documentElement.scrollWidth <= W.innerWidth + 1, width + 'px: no horizontal scroll');
+        ok(b.width >= a.width - 1, width + 'px: Mark done is not narrower than Copy for Claude');
+        const row = Math.abs(a.top - b.top) < 1;
+        if (row) ok(a.right <= b.left, width + 'px: Copy for Claude left of Mark done');
+        else ok(a.bottom <= b.top, width + 'px: stacked, Copy for Claude above Mark done');
+        return row;
+      }
+      ok(await layout(1280), '1280px: side by side');
+      await layout(375);
+      await layout(320);
+    } finally {
+      frame.style.width = '';
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude (built-in hero): writes exactly the project text; label says Copied for 2s, a second click restarts the 2s (one revert); live region says it once per click; focus stays; nothing else changes; Mark done and Fill again work as before', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(writeOk);
+    const restore = setClipboard(clip);
+    let spy = null;
+    let label = null;
+    let said = null;
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      const live = liveOf(hero);
+      const p = projectOf(hero);
+      ok(copy && live && p, 'button, live region, catalog project ' + hero.dataset.id);
+      eq(hero.querySelectorAll('[aria-live]').length, 1, 'one live region in the card');
+      ok(isShown(live), 'live region is rendered (visually hidden is fine), so screen readers get it');
+      eq(live.textContent, '', 'live region starts quiet');
+      W.scrollTo(0, 150);
+      await wait(0);
+      copy.focus({ preventScroll: true });
+      const before = untouched();
+      spy = spyScrollFocus();
+      label = watchText(copy);
+      said = watchText(live);
+
+      copy.click();
+      await wait(0);
+      eq(clip.writes.length, 1, 'one clipboard write');
+      eq(clip.writes[0], copyText(p), 'exact text of ' + p.id);
+      eq(copy.textContent, COPY_OK, 'label once the write resolves');
+      await wait(150);
+      eq(live.textContent, COPY_OK, 'live region says the same text');
+      await wait(850);
+      eq(copy.textContent, COPY_OK, 'still Copied 1s later');
+      copy.click();
+      await wait(0);
+      eq(clip.writes.length, 2, 'second click writes again');
+      eq(clip.writes[1], clip.writes[0], 'same text');
+      await wait(1500);
+      eq(copy.textContent, COPY_OK, '2.5s after the first click, 1.5s after the second: still Copied (first 2s timer dropped)');
+      await wait(700);
+      eq(copy.textContent, COPY_LABEL, 'back to Copy for Claude 2.2s after the second click');
+      await wait(2100);
+      eq(label.seen.join(' → '), COPY_OK + ' → ' + COPY_LABEL, 'one swap and exactly one revert');
+      eq(said.seen.filter(t => t === COPY_OK).length, 2, 'announced once per click: ' + JSON.stringify(said.seen));
+      ok(said.seen.every(t => t === COPY_OK || t === ''), 'nothing else announced: ' + JSON.stringify(said.seen));
+      eq(live.textContent, '', 'live region quiet again after the revert');
+      eq(D.activeElement, copy, 'focus stays on the button');
+      eq(spy.log.length, 0, 'no scrollIntoView and no focus calls: ' + spy.log.map(e => e.kind + ' ' + nodeName(e.node)).join(', '));
+      eq(untouched(), before, 'state, saved state, fields, phase, banner, cards and scroll unchanged');
+      ok(cards()[0] === hero && hero.isConnected, 'card not re-drawn');
+      eq(shownAreas(hero).length, 0, 'no textarea after a successful copy');
+      eq(W.QP.app.state.done.length, 0, 'copying marks nothing done');
+
+      // Mark done and Fill again after copying: same as without it.
+      hero.querySelector('.done-btn').click();
+      eq(W.QP.app.state.done.join(), p.id, 'Mark done marks this project');
+      ok(!$('done-banner').hidden && cards().length === 0, 'done banner, no card until Fill again');
+      eq(D.activeElement, $('recalc-btn'), 'focus on Fill again');
+      $('recalc-btn').click();
+      ok($('done-banner').hidden && !W.QP.app.state.stale, 'Fill again clears the done state');
+      eq($('claude-s-pct').value, '', 'Fill again clears the old numbers');
+      eq($('fill-status').textContent, FILL_WORKING, 'Fill again runs Fill');
+    } finally {
+      if (label) label.stop();
+      if (said) said.stop();
+      if (spy) spy.restore();
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude: the custom card copies its own text (core.customProject); a More projects card copies its own project', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(writeOk);
+    const restore = setClipboard(clip);
+    try {
+      await heroForCopy({ s: 60, w: 20 }); // 40% left → Medium
+      setVal('q-wish', 'organize the closet');
+      const hero = cards()[0];
+      eq(hero.dataset.id, 'custom:organize the closet', 'the custom card is the hero');
+      copyBtnOf(hero).click();
+      await wait(0);
+      const mine = W.QP.core.customProject('organize the closet', hero.dataset.band);
+      eq(clip.writes[0], copyText(mine), 'custom card text');
+      eq(clip.writes[0].split('\n')[0], text(hero.querySelector('h3')), 'first line is the title on the card');
+      eq(clip.writes[0].split('\n')[0], 'Make a first piece of “organize the closet”', 'Medium custom title');
+      eq(copyBtnOf(hero).textContent, COPY_OK, 'the custom card says Copied');
+
+      $('overflow').open = true;
+      $('recs-more').open = true;
+      await wait(0);
+      const other = moreCards().find(c => projectOf(c));
+      ok(other, 'a catalog card in More projects');
+      const otherBtn = copyBtnOf(other);
+      ok(otherBtn && isShown(otherBtn), 'More projects cards have Copy for Claude too');
+      otherBtn.click();
+      await wait(0);
+      eq(clip.writes.length, 2, 'one write per click');
+      eq(clip.writes[1], copyText(projectOf(other)), 'a More projects card copies its own project (' + other.dataset.id + ')');
+      eq(otherBtn.textContent, COPY_OK, 'that card says Copied');
+      eq(W.QP.app.state.done.length, 0, 'nothing marked done');
+    } finally {
+      $('overflow').open = false;
+      $('recs-more').open = false;
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude when the write fails (writeText rejects): read-only textarea under the button, all text selected, ⌘C / Ctrl+C hint; focus moves there without scrolling; a second failure reuses it; a later success hides it', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(writeDenied);
+    const restore = setClipboard(clip);
+    frame.style.height = '600px';
+    let spy = null;
+    let said = null;
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      const live = liveOf(hero);
+      const want = copyText(projectOf(hero));
+      eq(shownAreas(hero).length, 0, 'no textarea before a failed copy');
+      // Park the buttons on the bottom edge: what opens under them starts below the fold,
+      // so any scroll to show it would move the page.
+      W.scrollTo(0, W.scrollY + copy.getBoundingClientRect().bottom - W.innerHeight + 2);
+      await wait(0);
+      const y = W.scrollY;
+      ok(y > 0, 'page scrolled down to the buttons');
+      copy.focus({ preventScroll: true });
+      const before = untouched();
+      spy = spyScrollFocus();
+      said = watchText(live);
+
+      copy.click();
+      await wait(0);
+      eq(clip.writes.length, 1, 'tried the clipboard first');
+      eq(clip.writes[0], want, 'with the full text');
+      const areas = shownAreas(hero);
+      eq(areas.length, 1, 'one textarea opens');
+      const ta = areas[0];
+      ok(ta.readOnly, 'read-only');
+      eq(ta.value, want, 'holds the full text');
+      eq(ta.selectionStart + '–' + ta.selectionEnd, '0–' + want.length, 'all of it selected');
+      eq(D.activeElement, ta, 'focus moves to the textarea');
+      const tRect = ta.getBoundingClientRect();
+      ok(tRect.top >= copy.getBoundingClientRect().bottom - 0.5, 'under the button');
+      ok(tRect.top >= W.innerHeight - 4, 'opened below the fold (top ' + Math.round(tRect.top) + ' of ' + W.innerHeight + ')');
+      eq(W.scrollY, y, 'the page did not scroll');
+      eq(spy.log.filter(e => e.kind === 'scroll').length, 0, 'no scrollIntoView');
+      ok(spy.log.some(e => e.kind === 'focus' && e.node === ta), 'focus() on the textarea');
+      ok(spy.log.every(e => e.kind !== 'focus' || e.preventScroll), 'every focus passes preventScroll');
+      const hint = D.getElementById(ta.getAttribute('aria-describedby') || '');
+      ok(hint && hero.contains(hint) && isShown(hint), 'hint shown in the card and tied to the textarea (aria-describedby)');
+      eq(text(hint).trim(), COPY_HINT, 'hint text');
+      ok(hint.getBoundingClientRect().top >= tRect.bottom - 0.5, 'hint under the textarea');
+      ok((ta.getAttribute('aria-label') || '').trim().length > 0, 'textarea has an accessible name');
+      eq(copy.textContent, COPY_LABEL, 'label does not say Copied');
+      await wait(150);
+      eq(live.textContent, COPY_HINT, 'live region says the hint');
+
+      ta.setSelectionRange(2, 3);
+      copy.focus({ preventScroll: true });
+      copy.click();
+      await wait(150);
+      eq(hero.querySelectorAll('textarea').length, 1, 'second failure: still one textarea in the card');
+      eq(shownAreas(hero)[0], ta, 'the same textarea');
+      eq(ta.value, want, 'same text');
+      eq(ta.selectionStart + '–' + ta.selectionEnd, '0–' + want.length, 'all selected again');
+      eq(D.activeElement, ta, 'focus back in the textarea');
+      eq(said.seen.filter(t => t === COPY_HINT).length, 2, 'hint announced again: ' + JSON.stringify(said.seen));
+      eq(W.scrollY, y, 'still no scroll');
+      eq(untouched(), before, 'state, saved state, fields, phase, banner, cards and scroll unchanged');
+
+      // Success while focus is still in the textarea (Safari does not focus a clicked button).
+      clip.reply = writeOk;
+      copy.click();
+      await wait(150);
+      ok(!isShown(ta), 'a later success hides the textarea');
+      eq(shownAreas(hero).length, 0, 'nothing left open');
+      ok(hero.querySelectorAll('textarea').length <= 1, 'no second textarea');
+      eq(copy.textContent, COPY_OK, 'Copied');
+      eq(live.textContent, COPY_OK, 'live region says Copied');
+      eq(D.activeElement, copy, 'focus on the button, not lost with the hidden textarea');
+      eq(W.scrollY, y, 'no scroll on success either');
+      eq(spy.log.filter(e => e.kind === 'scroll').length, 0, 'no scrollIntoView at all');
+      ok(spy.log.every(e => e.kind !== 'focus' || e.preventScroll), 'every focus passes preventScroll');
+      eq(untouched(), before, 'still unchanged');
+      eq(W.QP.app.state.done.length, 0, 'nothing marked done');
+    } finally {
+      if (said) said.stop();
+      if (spy) spy.restore();
+      restore();
+      frame.style.height = '';
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude with no navigator.clipboard (or no writeText, or writeText throws): the same read-only textarea, all selected, with the hint; fits at 320px; a repeated click reuses it', async () => {
+    instantScroll(true);
+    const variants = [
+      ['no navigator.clipboard', () => undefined],
+      ['clipboard without writeText', () => ({})],
+      ['writeText throws', () => ({ writeText() { throw new W.DOMException('Not allowed.', 'NotAllowedError'); } })]
+    ];
+    try {
+      for (const [what, make] of variants) {
+        const hero = await heroForCopy();
+        const restore = setClipboard(make());
+        try {
+          frame.style.width = '320px';
+          await wait(80);
+          const copy = copyBtnOf(hero);
+          const want = copyText(projectOf(hero));
+          copy.click();
+          await wait(150);
+          const areas = shownAreas(hero);
+          eq(areas.length, 1, what + ': textarea opens');
+          const ta = areas[0];
+          ok(ta.readOnly, what + ': read-only');
+          eq(ta.value, want, what + ': full text');
+          eq(ta.selectionStart + '–' + ta.selectionEnd, '0–' + want.length, what + ': all selected');
+          eq(D.activeElement, ta, what + ': focus in the textarea');
+          const hint = D.getElementById(ta.getAttribute('aria-describedby') || '');
+          ok(hint && isShown(hint) && text(hint).trim() === COPY_HINT, what + ': hint');
+          eq(copy.textContent, COPY_LABEL, what + ': label does not say Copied');
+          eq(liveOf(hero).textContent, COPY_HINT, what + ': hint announced');
+          ok(D.documentElement.scrollWidth <= W.innerWidth + 1, what + ': no horizontal scroll at 320px');
+          ok(ta.getBoundingClientRect().right <= hero.getBoundingClientRect().right + 0.5, what + ': textarea inside the card at 320px');
+          copy.click();
+          await wait(0);
+          eq(hero.querySelectorAll('textarea').length, 1, what + ': a repeated click reuses the textarea');
+        } finally {
+          restore();
+          frame.style.width = '';
+        }
+      }
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude while the card is re-drawn by a quiz edit: a late clipboard answer, the announcement and the 2s timer touch nothing and throw nothing', async () => {
+    instantScroll(true);
+    let answer = null;
+    const clip = fakeClipboard(() => new W.Promise((resolve, reject) => { answer = { resolve: resolve, reject: reject }; }));
+    const restore = setClipboard(clip);
+    const rejections = [];
+    const onRejection = e => rejections.push(String(e.reason));
+    const errorsBefore = appErrors.length;
+    let watched = null;
+    try {
+      await heroForCopy();
+      watched = W;
+      W.addEventListener('unhandledrejection', onRejection);
+      const redraw = () => setVal('q-other', ''); // a quiz edit: renderRecs draws the same cards anew
+      for (const outcome of ['resolve', 'reject']) {
+        const old = cards()[0];
+        copyBtnOf(old).click();
+        ok(answer, outcome + ': write pending');
+        redraw();
+        const now = cards()[0];
+        ok(now !== old && !old.isConnected, outcome + ': card re-drawn while the write is pending');
+        eq(now.dataset.id, old.dataset.id, outcome + ': same project');
+        if (outcome === 'resolve') answer.resolve();
+        else answer.reject(new W.DOMException('Write permission denied.', 'NotAllowedError'));
+        answer = null;
+        await wait(200);
+        eq(copyBtnOf(old).textContent, COPY_LABEL, outcome + ': the old, detached button is left alone');
+        eq(old.querySelectorAll('textarea').length, 0, outcome + ': no textarea built in the old card');
+        eq(liveOf(old).textContent, '', outcome + ': old live region untouched');
+        eq(copyBtnOf(now).textContent, COPY_LABEL, outcome + ': the new card starts fresh');
+        eq(shownAreas(now).length, 0, outcome + ': no textarea in the new card');
+        eq(liveOf(now).textContent, '', outcome + ': new live region quiet');
+      }
+      // Copied: the announcement and the 2s timer are still pending when the card is re-drawn.
+      clip.reply = writeOk;
+      const old = cards()[0];
+      copyBtnOf(old).click();
+      await wait(0);
+      eq(copyBtnOf(old).textContent, COPY_OK, 'Copied');
+      redraw();
+      const now = cards()[0];
+      ok(!old.isConnected, 're-drawn inside the 2s');
+      await wait(2200);
+      eq(copyBtnOf(now).textContent, COPY_LABEL, 'the new card is not touched by the old timer');
+      eq(liveOf(now).textContent, '', 'the new live region stays quiet');
+      // Failed: the textarea is open when the card is re-drawn, and goes with the old card.
+      clip.reply = writeDenied;
+      copyBtnOf(now).click();
+      await wait(150);
+      eq(shownAreas(now).length, 1, 'textarea open');
+      redraw();
+      await wait(150);
+      eq(Array.from(D.querySelectorAll('textarea')).filter(isShown).length, 0, 'no textarea left on the page');
+      eq(copyBtnOf(cards()[0]).textContent, COPY_LABEL, 're-drawn card starts fresh');
+      eq(appErrors.length, errorsBefore, 'no page errors: ' + appErrors.slice(errorsBefore).join(' / '));
+      eq(rejections.length, 0, 'no unhandled promise rejections: ' + rejections.join(' / '));
+    } finally {
+      if (watched) watched.removeEventListener('unhandledrejection', onRejection);
+      restore();
+      instantScroll(false);
+    }
+  });
+
   // 「真发一个请求看会不会被拦下」放在 tests/probe.html 里单独跑：被拦下时浏览器一定会在控制台打一条提示，
   // 放在这里会让这套测试的控制台不干净。
   test('不联网：整个流程走完，只加载过本地的 css/js，页面里没有外部地址，也没有表单能提交出去', async () => {
