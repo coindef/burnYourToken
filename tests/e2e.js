@@ -18,10 +18,97 @@
   const $ = id => D.getElementById(id);
   const text = node => (node ? node.textContent : '');
 
-  // Fill scrolls the next control into view (scroll-behavior is smooth, so give it a moment).
-  // Headless runs use virtual time, which does not drive smooth-scroll animation, so the
-  // Fill-scroll checks switch the iframe to instant scrolling first.
-  function instantScroll(on) { D.documentElement.style.scrollBehavior = on ? 'auto' : ''; }
+  // Makes matchMedia('(prefers-reduced-motion: …)') in the app iframe answer from reduce(), read on
+  // every call; other queries go to the real matchMedia. Returns a function that restores it.
+  function mockReducedMotion(reduce) {
+    const win = W;
+    const real = win.matchMedia;
+    win.matchMedia = function (query) {
+      const q = String(query);
+      if (q.indexOf('prefers-reduced-motion') === -1) return real.call(win, query);
+      const on = !!reduce();
+      return {
+        matches: q.indexOf('no-preference') !== -1 ? !on : on,
+        media: q,
+        onchange: null,
+        addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
+        dispatchEvent() { return false; }
+      };
+    };
+    return () => { win.matchMedia = real; };
+  }
+
+  // Fill, Get project, Mark done and Fill again scroll their target into view. Headless runs use
+  // virtual time, which does not drive smooth-scroll animation, so scroll-position checks make
+  // scrolling instant: the app is told the user prefers reduced motion (so it asks for
+  // behavior 'auto'), and the iframe's html is pinned to scroll-behavior: auto, because 'auto'
+  // follows that property and css/style.css smooths it for no-preference, the real setting here.
+  // instantScroll(false) restores both.
+  let undoInstant = null;
+  function instantScroll(on) {
+    D.documentElement.style.scrollBehavior = on ? 'auto' : '';
+    if (on && !undoInstant) undoInstant = mockReducedMotion(() => true);
+    if (!on && undoInstant) {
+      undoInstant();
+      undoInstant = null;
+    }
+  }
+
+  // Logs scrollIntoView and focus calls in the app iframe, in call order. Scrolls are recorded,
+  // not run: these checks are about the options the app passes, and a real smooth scroll would
+  // stall half done under virtual time (tests/motion.html checks real scroll positions).
+  // Focus still runs, so activeElement checks keep working.
+  function spyScrollFocus() {
+    const scrollProto = W.Element.prototype;
+    const focusProto = W.HTMLElement.prototype;
+    const realScroll = scrollProto.scrollIntoView;
+    const realFocus = focusProto.focus;
+    const log = [];
+    scrollProto.scrollIntoView = function (opts) {
+      log.push({ kind: 'scroll', node: this, opts: opts, block: opts && opts.block, behavior: opts && opts.behavior });
+    };
+    focusProto.focus = function (opts) {
+      log.push({ kind: 'focus', node: this, opts: opts, preventScroll: !!(opts && opts.preventScroll) });
+      return realFocus.call(this, opts);
+    };
+    return {
+      log: log,
+      since: n => log.slice(n),
+      restore: () => {
+        scrollProto.scrollIntoView = realScroll;
+        focusProto.focus = realFocus;
+      }
+    };
+  }
+
+  const nodeName = n => (!n ? 'null' : n.id ? '#' + n.id : n.tagName.toLowerCase() + (n.className ? '.' + String(n.className).trim().split(/\s+/).join('.') : ''));
+
+  // entries: spy log for one action. steps: [scrollNode, block, focusNode] in the order the
+  // action runs them. Every scroll passes { block, behavior: want }; every focus passes
+  // preventScroll: true and comes after the scroll that brought its target into view;
+  // a focused heading has tabindex="-1".
+  function expectScrollThenFocus(entries, want, steps, what) {
+    const shown = entries.map(e => e.kind + ' ' + nodeName(e.node) +
+      (e.kind === 'scroll' ? '/' + e.block + '/' + e.behavior : e.preventScroll ? '/preventScroll' : '/scrolls')).join(', ') || 'none';
+    const scrolls = entries.filter(e => e.kind === 'scroll');
+    ok(scrolls.length > 0, what + ': no scrollIntoView call');
+    scrolls.forEach((e, i) => {
+      ok(e.opts && typeof e.opts === 'object', what + ': scroll ' + (i + 1) + ' passes an options object (' + shown + ')');
+      eq(e.behavior, want, what + ': behavior of scroll ' + (i + 1) + ' to ' + nodeName(e.node));
+    });
+    entries.filter(e => e.kind === 'focus').forEach(e => {
+      ok(e.preventScroll, what + ': focus on ' + nodeName(e.node) + ' passes preventScroll (' + shown + ')');
+      if (/^H[1-6]$/.test(e.node.tagName)) eq(e.node.getAttribute('tabindex'), '-1', what + ': focused heading ' + nodeName(e.node) + ' tabindex');
+    });
+    steps.forEach(s => {
+      const at = entries.findIndex(e => e.kind === 'scroll' && e.node === s[0] && e.block === s[1]);
+      ok(at !== -1, what + ': scrolls ' + nodeName(s[0]) + ' to ' + s[1] + ' (' + shown + ')');
+      const first = entries.findIndex(e => e.kind === 'focus' && e.node === s[2]);
+      ok(first !== -1, what + ': focuses ' + nodeName(s[2]) + ' (' + shown + ')');
+      ok(first > at, what + ': focuses ' + nodeName(s[2]) + ' after scrolling ' + nodeName(s[0]) + ', not before (' + shown + ')');
+    });
+  }
+
   // block: 'nearest' lines the control up with the bottom edge, so allow 1px of subpixel rounding.
   function inViewport(node) {
     const r = node.getBoundingClientRect();
@@ -328,14 +415,176 @@
     // Same trick as Fill-scroll checks: virtual time does not finish CSS smooth scrolling.
     // Reduced motion is tests/motion.html, which reads real scroll positions.
     instantScroll(true);
-    calc();
-    const hero = cards()[0];
-    ok(hero && hero.classList.contains('hero'), 'hero rendered');
-    const title = hero.querySelector('h3');
-    ok(title && title.getAttribute('tabindex') === '-1', 'title is focusable');
-    eq(D.activeElement, title, 'focus on the hero title, not the card');
-    ok(title.getBoundingClientRect().top >= -1 && title.getBoundingClientRect().top < W.innerHeight, 'title scrolled into view');
+    try {
+      calc();
+      const hero = cards()[0];
+      ok(hero && hero.classList.contains('hero'), 'hero rendered');
+      const title = hero.querySelector('h3');
+      ok(title && title.getAttribute('tabindex') === '-1', 'title is focusable');
+      eq(D.activeElement, title, 'focus on the hero title, not the card');
+      ok(title.getBoundingClientRect().top >= -1 && title.getBoundingClientRect().top < W.innerHeight, 'title scrolled into view');
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('css/style.css: smooth scrolling is opt-in; the only scroll-behavior: smooth sits in @media (prefers-reduced-motion: no-preference)', () => {
+    const sheet = Array.from(D.styleSheets).find(s => s.href && /\/css\/style\.css$/.test(s.href.split('?')[0]));
+    ok(sheet, 'css/style.css is loaded in the app');
+    // Every scroll-behavior declaration, with the rules around it (@media, @supports, nesting).
+    // Style rules have a cssRules list too (CSS nesting), so read each rule's own style first.
+    const decls = [];
+    (function walk(rules, groups) {
+      Array.from(rules).forEach(rule => {
+        const value = rule.style ? rule.style.getPropertyValue('scroll-behavior').trim() : '';
+        if (value) decls.push({ groups: groups, selector: rule.selectorText, value: value });
+        if (rule.cssRules && rule.cssRules.length) walk(rule.cssRules, groups.concat(rule));
+      });
+    })(sheet.cssRules, []);
+    const where = d => d.groups.map(g => (g instanceof W.CSSMediaRule ? '@media ' + g.media.mediaText : g.cssText.split('{')[0].trim())).join(' > ') || 'top level';
+    const shown = decls.map(d => where(d) + ' ' + d.selector + ' { scroll-behavior: ' + d.value + ' }').join('; ') || 'none';
+    const smooth = decls.filter(d => d.value === 'smooth');
+    eq(smooth.length, 1, 'one scroll-behavior: smooth (' + shown + ')');
+    ok(smooth[0].groups.length === 1 && smooth[0].groups[0] instanceof W.CSSMediaRule, 'smooth sits in one @media rule (' + shown + ')');
+    eq(smooth[0].groups[0].media.mediaText, '(prefers-reduced-motion: no-preference)', 'media text');
+    eq(smooth[0].selector, 'html', 'smooth applies to html');
+    ok(!decls.some(d => !d.groups.length), 'no scroll-behavior at top level (' + shown + ')');
+    eq(decls.length, 1, 'no other scroll-behavior rule, so no reduce override either (' + shown + ')');
+    const base = Array.from(sheet.cssRules).filter(r => r instanceof W.CSSStyleRule && r.selectorText === 'html');
+    eq(base.length, 1, 'one top-level html rule');
+    eq(base[0].style.getPropertyValue('text-size-adjust') || base[0].style.getPropertyValue('-webkit-text-size-adjust'), '100%', 'base html rule keeps -webkit-text-size-adjust');
+    // This headless run has no reduced-motion preference, so the media rule applies.
     instantScroll(false);
+    eq(W.matchMedia('(prefers-reduced-motion: no-preference)').matches, true, 'real preference here is no-preference');
+    eq(W.getComputedStyle(D.documentElement).scrollBehavior, 'smooth', 'html computes to smooth for no-preference');
+  });
+
+  test('Reduced motion: Get project, Mark done and Fill again scroll with behavior auto, otherwise smooth; focus follows each scroll (matchMedia mocked)', async () => {
+    const usage = fixtureUsage();
+    for (const reduce of [false, true]) {
+      const want = reduce ? 'auto' : 'smooth';
+      const tag = (reduce ? 'reduce' : 'no-preference') + ' ';
+      await fresh();
+      const undo = mockReducedMotion(() => reduce);
+      const spy = spyScrollFocus();
+      installUsageBridge(() => ({ ok: true, usage: usage }));
+      try {
+        fill('claude', { s: 72, h: 3, m: 12, w: 31 });
+        let from = spy.log.length;
+        calc();
+        const hero = cards()[0];
+        ok(hero && hero.classList.contains('hero'), tag + 'hero rendered');
+        expectScrollThenFocus(spy.since(from), want, [[hero, 'start', hero.querySelector('h3')]], tag + 'Get project');
+        eq(D.activeElement, hero.querySelector('h3'), tag + 'Get project: focus on the hero title');
+
+        from = spy.log.length;
+        hero.querySelector('.done-btn').click();
+        expectScrollThenFocus(spy.since(from), want, [[$('recs'), 'start', $('recalc-btn')]], tag + 'Mark done');
+        eq(D.activeElement, $('recalc-btn'), tag + 'Mark done: focus on Fill again');
+
+        from = spy.log.length;
+        $('recalc-btn').click();
+        eq(D.activeElement, $('fill-usage-btn'), tag + 'Fill again: focus on Fill while it reads');
+        await flushFill();
+        await wait(50);
+        expectScrollThenFocus(spy.since(from), want,
+          [[$('calc'), 'start', $('fill-usage-btn')], [$('calc-btn'), 'center', $('calc-btn')]], tag + 'Fill again');
+        eq(D.activeElement, $('calc-btn'), tag + 'Fill again: after the reply, focus on Get project');
+      } finally {
+        spy.restore();
+        undo();
+        removeUsageBridge();
+      }
+    }
+  });
+
+  test('Reduced motion switched on and off mid-session (no reload): each next scroll follows the setting at that moment', async () => {
+    const usage = fixtureUsage();
+    await fresh();
+    const doc = D;
+    W.__sameSession = true;
+    let reduce = false;
+    const undo = mockReducedMotion(() => reduce);
+    const spy = spyScrollFocus();
+    installUsageBridge(() => ({ ok: true, usage: usage }));
+    // Flip the setting, click, then check every scroll and focus since the flip.
+    async function step(on, what, click, steps) {
+      reduce = on;
+      const from = spy.log.length;
+      await click();
+      expectScrollThenFocus(spy.since(from), on ? 'auto' : 'smooth', steps(), (on ? 'reduce' : 'no-preference') + ' ' + what);
+    }
+    const getProject = () => calc();
+    const markDone = () => cards()[0].querySelector('.done-btn').click();
+    const fillAgain = async () => {
+      $('recalc-btn').click();
+      await flushFill();
+      await wait(50);
+    };
+    const heroSteps = () => [[cards()[0], 'start', cards()[0].querySelector('h3')]];
+    const doneSteps = () => [[$('recs'), 'start', $('recalc-btn')]];
+    const againSteps = () => [[$('calc'), 'start', $('fill-usage-btn')], [$('calc-btn'), 'center', $('calc-btn')]];
+    try {
+      fill('claude', { s: 72, h: 3, m: 12, w: 31 });
+      await step(false, 'Get project', getProject, heroSteps);
+      await step(true, 'Mark done', markDone, doneSteps);
+      await step(false, 'Fill again', fillAgain, againSteps);
+      await step(true, 'Get project', getProject, heroSteps);
+      await step(false, 'Mark done', markDone, doneSteps);
+      await step(true, 'Fill again', fillAgain, againSteps);
+      await step(false, 'Get project', getProject, heroSteps);
+      ok(W.__sameSession === true && W.document === doc, 'same page the whole time: no reload');
+      eq(W.QP.app.state.done.length, 2, 'two projects marked done in this session');
+    } finally {
+      spy.restore();
+      undo();
+      removeUsageBridge();
+      delete W.__sameSession;
+    }
+  });
+
+  test('Reduced motion: Fill without the extension, Fill with no plan, Try sample and Skip use the same scroll behavior (matchMedia mocked)', async () => {
+    const usage = fixtureUsage();
+    for (const reduce of [false, true]) {
+      const want = reduce ? 'auto' : 'smooth';
+      const tag = (reduce ? 'reduce' : 'no-preference') + ' ';
+      await fresh();
+      const undo = mockReducedMotion(() => reduce);
+      const spy = spyScrollFocus();
+      try {
+        removeUsageBridge();
+        let from = spy.log.length;
+        $('fill-usage-btn').click();
+        await wait(1700);
+        expectScrollThenFocus(spy.since(from), want, [[$('claude-s-pct'), 'center', $('claude-s-pct')]], tag + 'Fill, no extension');
+        eq(D.activeElement, $('claude-s-pct'), tag + 'no extension: focus on Session %');
+
+        await fresh();
+        installUsageBridge(() => ({ ok: true, usage: Object.assign({}, usage, { plan: '' }) }));
+        from = spy.log.length;
+        $('fill-usage-btn').click();
+        await flushFill();
+        await wait(50);
+        expectScrollThenFocus(spy.since(from), want, [[$('claude-plan'), 'center', $('claude-plan')]], tag + 'Fill, no plan');
+        eq(D.activeElement, $('claude-plan'), tag + 'no plan: focus on the plan select');
+        removeUsageBridge();
+
+        from = spy.log.length;
+        $('example-btn').click();
+        expectScrollThenFocus(spy.since(from), want, [[$('calc-btn'), 'center', $('calc-btn')]], tag + 'Try sample');
+        eq(D.activeElement, $('calc-btn'), tag + 'Try sample: focus on Get project');
+
+        calc();
+        from = spy.log.length;
+        $('skip-btn').click();
+        expectScrollThenFocus(spy.since(from), want, [[$('recs'), 'start', $('recs-title')]], tag + 'Skip to recommendations');
+        eq(D.activeElement, $('recs-title'), tag + 'Skip: focus on the recommendations heading');
+      } finally {
+        spy.restore();
+        undo();
+        removeUsageBridge();
+      }
+    }
   });
 
   test('Try sample fills fields and focuses Get project without running it', async () => {

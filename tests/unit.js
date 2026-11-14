@@ -722,5 +722,27 @@
     eq(C.onboardingView('other'), null, 'unknown phase');
   });
 
+  test('scroll behavior: reduced motion → auto, otherwise smooth; matchMedia read on every call; missing or broken matchMedia → smooth', () => {
+    const asked = [];
+    let reduce = false;
+    const win = { matchMedia(q) { asked.push(q); return { matches: reduce, media: q }; } };
+    eq(C.scrollBehaviorFor(win), 'smooth', 'no preference → smooth');
+    reduce = true;
+    eq(C.scrollBehaviorFor(win), 'auto', 'reduce → auto (instant jump)');
+    reduce = false;
+    eq(C.scrollBehaviorFor(win), 'smooth', 'turned off again → smooth (not cached)');
+    eq(asked.length, 3, 'one matchMedia read per call');
+    ok(asked.every(q => q === '(prefers-reduced-motion: reduce)'), 'asks the reduce query: ' + asked.join(' | '));
+    const late = {};
+    eq(C.scrollBehaviorFor(late), 'smooth', 'no matchMedia → smooth');
+    late.matchMedia = () => ({ matches: true });
+    eq(C.scrollBehaviorFor(late), 'auto', 'matchMedia that shows up later is used');
+    eq(C.scrollBehaviorFor(null), 'smooth', 'no window → smooth');
+    eq(C.scrollBehaviorFor({ matchMedia: null }), 'smooth', 'matchMedia null → smooth');
+    eq(C.scrollBehaviorFor({ matchMedia: () => null }), 'smooth', 'matchMedia returns null → smooth');
+    eq(C.scrollBehaviorFor({ matchMedia: () => { throw new Error('boom'); } }), 'smooth', 'matchMedia throws → smooth');
+    eq(C.scrollBehaviorFor(window), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', 'real window');
+  });
+
   window.addEventListener('load', () => runTests());
 })();

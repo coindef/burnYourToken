@@ -141,9 +141,7 @@
     syncOnboarding();
     if (planChosen()) setPrimary('get');
     const getBtn = $('calc-btn');
-    if (!getBtn) return;
-    getBtn.focus({ preventScroll: true });
-    scrollNodeIntoView(getBtn, 'center');
+    scrollToTarget(getBtn, 'center', getBtn);
   }
 
   function togglePlan(p) {
@@ -234,20 +232,22 @@
     focusHeroAfterGet();
   }
 
-  // Motion comes from html { scroll-behavior } in css/style.css, including the
-  // reduced-motion override. behavior:'auto' would still follow that property.
-  function scrollNodeIntoView(node, block) {
-    if (!node) return;
-    node.scrollIntoView({ block: block || 'start' });
+  // Every scroll the page makes goes through here: Get project, Mark done, Fill again, Fill,
+  // Try sample, Skip, and the manual fields. The reduced-motion preference is read on each
+  // call (core.scrollBehaviorFor), so switching it mid-session applies to the next scroll:
+  // reduce → behavior 'auto', an instant jump (css/style.css smooths html only for
+  // no-preference); otherwise 'smooth'. Focus, if given, moves after the scroll starts and
+  // without scrolling, so it never yanks the page.
+  function scrollToTarget(node, block, focusNode) {
+    if (node) node.scrollIntoView({ block: block || 'start', behavior: core.scrollBehaviorFor(window) });
+    if (focusNode) focusNode.focus({ preventScroll: true });
   }
 
   // After Get project: bring the hero into view and put focus on its title (not the whole card).
   function focusHeroAfterGet() {
     const title = document.querySelector('#recs-list .card.hero h3');
     if (!title) return;
-    const card = title.closest('.card') || title;
-    scrollNodeIntoView(card, 'start');
-    title.focus({ preventScroll: true });
+    scrollToTarget(title.closest('.card') || title, 'start', title);
   }
 
   // Failures only. A successful band is chips above the hero, never a result card.
@@ -540,14 +540,12 @@
     save();
     renderResults();
     renderRecs();
-    $('recs').scrollIntoView({ block: 'start' });
-    $('recalc-btn').focus({ preventScroll: true });
+    scrollToTarget($('recs'), 'start', $('recalc-btn'));
   }
 
   // 跳过问卷：不动已经填的，直接去第 3 步
   function skipQuiz() {
-    $('recs').scrollIntoView({ block: 'start' });
-    $('recs-title').focus({ preventScroll: true });
+    scrollToTarget($('recs'), 'start', $('recs-title'));
   }
 
   // Fill again: back to step 1 and run Fill directly. Get project stays a separate click.
@@ -569,8 +567,7 @@
     save();
     renderResults();
     renderRecs();
-    $('calc').scrollIntoView({ block: 'start' });
-    $('fill-usage-btn').focus({ preventScroll: true });
+    scrollToTarget($('calc'), 'start', $('fill-usage-btn'));
     fillFromUsage();
   }
 
@@ -772,19 +769,16 @@
     showFillStatus('ok', fillReads > 1 ? FILL_AGAIN : FILL_OK);
     promoteAfterFill();
     // The next control is often below the fold; bring it into view, then focus it.
-    // Scroll after this frame's layout settles (Fill again collapses the banner and results).
+    // Scroll again after this frame's layout settles (Fill again collapses the banner and results).
     const next = planChosen() ? $('calc-btn') : $('claude-plan');
-    next.focus({ preventScroll: true });
-    const bring = () => { if (gen === fillGen) next.scrollIntoView({ block: 'center' }); };
-    bring();
+    scrollToTarget(next, 'center', next);
+    const bring = () => { if (gen === fillGen) scrollToTarget(next, 'center'); };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(bring);
   }
 
   function focusManual() {
     const pct = $('claude-s-pct');
-    if (!pct) return;
-    pct.focus({ preventScroll: true });
-    pct.scrollIntoView({ block: 'center' });
+    scrollToTarget(pct, 'center', pct);
   }
 
   function clearAll() {

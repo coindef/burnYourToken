@@ -27,12 +27,13 @@
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+html { -webkit-text-size-adjust: 100%; }
 
-/* Reduced motion: instant. The default and behavior:'auto' both follow this
-   property. CSS scroll-behavior has no 'instant' value. */
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
+/* Smooth scrolling is opt-in: only with no reduced-motion preference. Otherwise html
+   keeps the initial scroll-behavior: auto, an instant jump. js/app.js also passes an
+   explicit behavior to every scroll it makes. */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
 }
 
 body {
