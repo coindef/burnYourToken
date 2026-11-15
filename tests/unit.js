@@ -744,5 +744,99 @@
     eq(C.scrollBehaviorFor(window), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', 'real window');
   });
 
+  // ---------------- Copy for Claude (#27): the plain text a card copies ----------------
+
+  // The issue's format, written out by hand so these checks do not reuse core's own code.
+  function copyFormat(title, output, steps, done) {
+    return title + '\n\n' + 'What you\'ll end with: ' + output + '\n\n' + 'Steps:\n' +
+      steps.map((s, i) => (i + 1) + '. ' + s).join('\n') + '\n\n' + 'Done when: ' + done;
+  }
+  // Markdown the builder must not add: emphasis, code, links, headings, bullets, quotes, tables.
+  function markdownIn(text) {
+    const found = [];
+    if (/\*\*|__|`|\]\(/.test(text)) found.push('inline markdown');
+    text.split('\n').forEach(line => { if (/^\s*([#>*+|-]|\d+\)|\[)/.test(line)) found.push('line "' + line + '"'); });
+    return found.join(' / ');
+  }
+
+  test('Copy for Claude text: exact plain-text format (title, What you\'ll end with, numbered Steps, Done when)', () => {
+    eq(typeof C.projectClipboardText, 'function', 'core.projectClipboardText is exported');
+    const text = C.projectClipboardText({
+      id: 'x', band: 'small', title: 'Plan a day out', output: 'A one-day plan.',
+      steps: ['Say where you start.', 'Ask for a route.', 'Ask for a rain backup.'], done: 'A checked plan.'
+    });
+    eq(text, 'Plan a day out\n' +
+      '\n' +
+      'What you\'ll end with: A one-day plan.\n' +
+      '\n' +
+      'Steps:\n' +
+      '1. Say where you start.\n' +
+      '2. Ask for a route.\n' +
+      '3. Ask for a rain backup.\n' +
+      '\n' +
+      'Done when: A checked plan.');
+  });
+
+  test('Copy for Claude text: a built-in project from the catalog, and the same card object recommend() hands the page', () => {
+    const p = QP.PROJECTS.find(x => x.id === 'travel-day-trip');
+    ok(p, 'catalog has travel-day-trip');
+    const before = JSON.stringify(p);
+    const text = C.projectClipboardText(p);
+    eq(text, copyFormat(p.title, p.output, p.steps, p.done), 'travel-day-trip');
+    const lines = text.split('\n');
+    eq(lines[0], 'Plan a one-day outing', 'title line');
+    eq(lines[2], 'What you\'ll end with: One day: when, where, how you get there, where you eat, and a backup if it rains.', 'output line');
+    eq(lines[4], 'Steps:', 'steps header');
+    eq(lines[8], '4. Hours, ticket prices, and transit may be stale. Check a map and the official page before you go.', 'last step, numbered 4');
+    eq(lines[lines.length - 1], 'Done when: A checked one-day plan plus a backup.', 'done line');
+    eq(JSON.stringify(p), before, 'the catalog project is not changed');
+    // recommend() copies the project and hangs a why on it; the text leaves the why out.
+    const card = C.recommend({ band: 'medium', domains: ['travel'] }).cards[0];
+    eq(card.id, 'travel-day-trip', 'first medium travel card');
+    ok(card.why && card.why.matches.length, 'the card object has a why');
+    eq(C.projectClipboardText(card), text, 'the card object copies the same text');
+    ok(text.indexOf(card.why.matches[0]) === -1 && text.indexOf(card.why.band) === -1, 'no why in the text');
+  });
+
+  test('Copy for Claude text: every catalog project, every step numbered in order, no markdown, no stray whitespace', () => {
+    QP.PROJECTS.forEach(p => {
+      const text = C.projectClipboardText(p);
+      eq(text, copyFormat(p.title, p.output, p.steps, p.done), p.id);
+      eq(text.split('\n').length, p.steps.length + 7, p.id + ' line count');
+      eq(markdownIn(text), '', p.id + ' adds no markdown');
+      ok(text.split('\n').every(line => line === line.trim()), p.id + ' no spaces at line ends');
+      ok(!/[\r\t]/.test(text) && !/\s$/.test(text), p.id + ' plain \\n only, nothing after the last line');
+    });
+  });
+
+  test('Copy for Claude text: the custom card (core.customProject) in every band; the why recommend() adds is not copied', () => {
+    const wish = 'organize the closet';
+    ['small', 'medium', 'large'].forEach(band => {
+      const p = C.customProject(wish, band);
+      const text = C.projectClipboardText(p);
+      eq(text, copyFormat(p.title, p.output, p.steps, p.done), band);
+      eq(markdownIn(text), '', band + ' adds no markdown');
+    });
+    const medium = C.projectClipboardText(C.customProject(wish, 'medium')).split('\n');
+    eq(medium[0], 'Make a first piece of “organize the closet”', 'custom title, quotes kept');
+    eq(medium[5], '1. Send this to the AI: “I want to: organize the closet. Ask me a few questions, then break this into steps.”', 'first step quotes what you wrote');
+    const card = C.recommend({ band: 'small', wish: wish }).cards.find(p => p.custom);
+    ok(card && card.why && card.why.matches.length, 'recommend() gives the custom card a why');
+    eq(C.projectClipboardText(card), C.projectClipboardText(C.customProject(wish, 'small')), 'the why is not copied');
+  });
+
+  test('Copy for Claude text: missing or empty steps leave out the Steps block; blank steps are skipped and the rest stay 1, 2', () => {
+    const base = { title: 'T', output: 'O', done: 'D' };
+    const noSteps = 'T\n\nWhat you\'ll end with: O\n\nDone when: D';
+    eq(C.projectClipboardText(base), noSteps, 'no steps field');
+    eq(C.projectClipboardText(Object.assign({ steps: [] }, base)), noSteps, 'steps: []');
+    eq(C.projectClipboardText(Object.assign({ steps: null }, base)), noSteps, 'steps: null');
+    eq(C.projectClipboardText(Object.assign({ steps: ['', '   ', null] }, base)), noSteps, 'only blank steps');
+    eq(C.projectClipboardText(Object.assign({ steps: ['', ' First ', '  ', 'Second  half'] }, base)),
+      'T\n\nWhat you\'ll end with: O\n\nSteps:\n1. First\n2. Second half\n\nDone when: D',
+      'blank steps skipped; spaces tidied the way the card shows them');
+    eq(C.projectClipboardText({ title: 'T', steps: ['a'] }), 'T\n\nSteps:\n1. a', 'no output or done: those lines are left out');
+  });
+
   window.addEventListener('load', () => runTests());
 })();
