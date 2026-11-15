@@ -1442,6 +1442,28 @@
   const shownAreas = c => Array.from(c.querySelectorAll('textarea')).filter(isShown);
   const projectOf = c => W.QP.PROJECTS.find(p => p.id === c.dataset.id);
 
+  // Headless virtual time can ignore element.focus() while the iframe window is not active,
+  // and can drop that focus across the 1s write timer. Focus the iframe first. atWriteTimeout
+  // wraps that timer: around(fn) runs in the same turn and must call fn() so showFallback
+  // reads the focus a real click would still have.
+  function focusInApp(el) {
+    W.focus();
+    el.focus({ preventScroll: true });
+  }
+  function atWriteTimeout(around) {
+    const realSet = W.setTimeout;
+    W.setTimeout = function (fn, ms) {
+      if (ms !== 1000) return realSet.apply(W, arguments);
+      return realSet.call(W, function () { around(fn); }, ms);
+    };
+    return () => { W.setTimeout = realSet; };
+  }
+  function focusOnClick(el) {
+    const fn = () => focusInApp(el);
+    el.addEventListener('click', fn, true);
+    return () => el.removeEventListener('click', fn, true);
+  }
+
   // Every change of node's text, in order. A live region cleared and then given the same
   // words again shows up twice: that is what makes a screen reader say it again.
   function watchText(node) {
@@ -1663,6 +1685,7 @@
     frame.style.height = '600px';
     let spy = null;
     let said = null;
+    let unfocus = () => {};
     try {
       const hero = await heroForCopy();
       const copy = copyBtnOf(hero);
@@ -1675,10 +1698,11 @@
       await wait(0);
       const y = W.scrollY;
       ok(y > 0, 'page scrolled down to the buttons');
-      copy.focus({ preventScroll: true });
+      focusInApp(copy);
       const before = untouched();
       spy = spyScrollFocus();
       said = watchText(live);
+      unfocus = focusOnClick(copy);
 
       copy.click();
       await wait(0);
@@ -1708,7 +1732,7 @@
       eq(live.textContent, '', 'live region stays quiet: the hint is already on aria-describedby');
 
       ta.setSelectionRange(2, 3);
-      copy.focus({ preventScroll: true });
+      focusInApp(copy);
       copy.click();
       await wait(150);
       eq(hero.querySelectorAll('textarea').length, 1, 'second failure: still one textarea in the card');
@@ -1721,6 +1745,8 @@
       eq(untouched(), before, 'state, saved state, fields, phase, banner, cards and scroll unchanged');
 
       // Success while focus is still in the textarea (Safari does not focus a clicked button).
+      unfocus();
+      unfocus = () => {};
       clip.reply = writeOk;
       copy.click();
       await wait(150);
@@ -1736,6 +1762,7 @@
       eq(untouched(), before, 'still unchanged');
       eq(W.QP.app.state.done.length, 0, 'nothing marked done');
     } finally {
+      unfocus();
       if (said) said.stop();
       if (spy) spy.restore();
       restore();
@@ -1755,11 +1782,14 @@
       for (const [what, make] of variants) {
         const hero = await heroForCopy();
         const restore = setClipboard(make());
+        let unfocus = () => {};
         try {
           frame.style.width = '320px';
           await wait(80);
           const copy = copyBtnOf(hero);
           const want = copyText(projectOf(hero));
+          unfocus = focusOnClick(copy);
+          focusInApp(copy);
           copy.click();
           await wait(150);
           const areas = shownAreas(hero);
@@ -1779,6 +1809,7 @@
           await wait(0);
           eq(hero.querySelectorAll('textarea').length, 1, what + ': a repeated click reuses the textarea');
         } finally {
+          unfocus();
           restore();
           frame.style.width = '';
         }
@@ -1885,14 +1916,16 @@
 
   // The same fallback showFallback builds for a rejected write: one read-only textarea, all of
   // the text selected, the ⌘C / Ctrl+C hint, focus there, and a quiet live region.
-  function expectCopyFallback(hero, want, what) {
+  // focused: the element that had focus in the same turn the box opened. Headless virtual time
+  // can move focus again before this check runs, so pass that element when the open was async.
+  function expectCopyFallback(hero, want, what, focused) {
     const areas = shownAreas(hero);
     eq(areas.length, 1, what + ': one textarea');
     const ta = areas[0];
     ok(ta.readOnly, what + ': read-only');
     eq(ta.value, want, what + ': full text');
     eq(ta.selectionStart + '–' + ta.selectionEnd, '0–' + want.length, what + ': all selected');
-    eq(D.activeElement, ta, what + ': focus in the textarea');
+    eq(focused == null ? D.activeElement : focused, ta, what + ': focus in the textarea');
     const hint = D.getElementById(ta.getAttribute('aria-describedby') || '');
     ok(hint && hero.contains(hint) && isShown(hint) && text(hint).trim() === COPY_HINT, what + ': hint');
     eq(copyBtnOf(hero).textContent, COPY_LABEL, what + ': label does not say Copied');
@@ -1903,19 +1936,41 @@
     instantScroll(true);
     const clip = fakeClipboard(writeOk);
     const restore = setClipboard(clip);
+    const realSet = W.setTimeout;
+    const realClear = W.clearTimeout;
+    const armed = [];
+    const cleared = [];
+    let spying = false;
     try {
       const hero = await heroForCopy();
       const copy = copyBtnOf(hero);
+      // The settled flag would hide a timer that was left running, so watch clearTimeout itself.
+      W.setTimeout = function (fn, ms) {
+        const id = realSet.apply(W, arguments);
+        if (ms === 1000) armed.push(id);
+        return id;
+      };
+      W.clearTimeout = function (id) {
+        cleared.push(id);
+        return realClear.call(W, id);
+      };
+      spying = true;
       copy.click();
       await wait(0);
       eq(clip.writes.length, 1, 'one write');
       eq(copy.textContent, COPY_DONE, 'Copied as soon as the write resolves');
       eq(shownAreas(hero).length, 0, 'no textarea');
+      eq(armed.length, 1, 'one 1s write timer');
+      ok(cleared.indexOf(armed[0]) !== -1, 'clearTimeout was called with that timer');
       await wait(1200);
       eq(copy.textContent, COPY_DONE, 'still Copied 1.2s later: the 1s write timer did not open the fallback');
       eq(shownAreas(hero).length, 0, 'still no textarea');
       eq(liveOf(hero).textContent, COPY_SAID, 'live region still says Copied');
     } finally {
+      if (spying) {
+        W.setTimeout = realSet;
+        W.clearTimeout = realClear;
+      }
       restore();
       instantScroll(false);
     }
@@ -1929,16 +1984,89 @@
       const hero = await heroForCopy();
       const copy = copyBtnOf(hero);
       const want = copyText(projectOf(hero));
-      copy.click();
-      await wait(0);
-      eq(clip.writes.length, 1, 'tried the clipboard');
-      eq(clip.writes[0], want, 'with the full text');
-      await wait(200);
-      eq(shownAreas(hero).length, 0, 'no textarea yet: a hang is not an instant failure');
-      eq(copy.textContent, COPY_LABEL, 'label unchanged while the write is pending');
-      eq(liveOf(hero).textContent, '', 'live region quiet while pending');
-      await wait(1300);
-      expectCopyFallback(hero, want, 'within 1.5s');
+      let atFire = null;
+      const undo = atWriteTimeout(fn => {
+        focusInApp(copy);
+        fn();
+        atFire = D.activeElement;
+      });
+      try {
+        focusInApp(copy);
+        copy.click();
+        await wait(0);
+        eq(clip.writes.length, 1, 'tried the clipboard');
+        eq(clip.writes[0], want, 'with the full text');
+        await wait(200);
+        eq(shownAreas(hero).length, 0, 'no textarea yet: a hang is not an instant failure');
+        eq(copy.textContent, COPY_LABEL, 'label unchanged while the write is pending');
+        eq(liveOf(hero).textContent, '', 'live region quiet while pending');
+        await wait(1300);
+        expectCopyFallback(hero, want, 'within 1.5s', atFire);
+      } finally {
+        undo();
+      }
+    } finally {
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude when the fallback opens: focus moves into the box if it is still on the button or the body, and stays put if it moved elsewhere during the write', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(() => new W.Promise(() => {}));
+    const restore = setClipboard(clip);
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      const elsewhere = hero.querySelector('.done-btn');
+      const want = copyText(projectOf(hero));
+      // .click() does not focus. A real click does. Re-apply the focus inside the 1s timer,
+      // in the same turn showFallback reads it: virtual time can drop it during the wait.
+      let place = 'away';
+      let atFire = null;
+      const undo = atWriteTimeout(fn => {
+        if (place === 'away') focusInApp(elsewhere);
+        else if (place === 'button') focusInApp(copy);
+        else {
+          W.focus();
+          const cur = W.document.activeElement;
+          if (cur && cur !== W.document.body && cur.blur) cur.blur();
+        }
+        fn();
+        atFire = D.activeElement;
+      });
+      try {
+        focusInApp(copy);
+        copy.click();
+        eq(D.activeElement, copy, 'focus is on the button while the write is pending');
+        focusInApp(elsewhere);
+        eq(D.activeElement, elsewhere, 'focus moved to Mark done before the timeout');
+        await wait(1500);
+        const areas = shownAreas(hero);
+        eq(areas.length, 1, 'the fallback box opened');
+        eq(areas[0].value, want, 'the box holds the project text');
+        eq(areas[0].selectionStart + '–' + areas[0].selectionEnd, '0–' + want.length, 'all of it selected');
+        eq(atFire, elsewhere, 'focus stays on Mark done: the box does not take it');
+
+        place = 'button';
+        focusInApp(copy);
+        copy.click();
+        eq(D.activeElement, copy, 'focus is on the button while the next write is pending');
+        await wait(1500);
+        eq(shownAreas(hero).length, 1, 'still the one box');
+        eq(atFire, areas[0], 'focus moves from the button into the box');
+
+        place = 'body';
+        focusInApp(copy);
+        copy.click();
+        W.focus();
+        copy.blur();
+        eq(D.activeElement, D.body, 'focus is on the body while the next write is pending');
+        await wait(1500);
+        eq(atFire, areas[0], 'focus moves from the body into the box');
+      } finally {
+        undo();
+      }
     } finally {
       restore();
       instantScroll(false);
@@ -1957,18 +2085,29 @@
       const copy = copyBtnOf(hero);
       const live = liveOf(hero);
       const want = copyText(projectOf(hero));
-      copy.click();
-      await wait(1500);
-      expectCopyFallback(hero, want, 'before the late resolve');
-      label = watchText(copy);
-      said = watchText(live);
-      ok(typeof release === 'function', 'the write is still pending');
-      release();
-      await wait(400);
-      eq(copy.textContent, COPY_LABEL, 'late resolve does not say Copied');
-      expectCopyFallback(hero, want, 'after the late resolve');
-      ok(label.seen.indexOf(COPY_DONE) === -1, 'label never flashes Copied: ' + JSON.stringify(label.seen));
-      ok(said.seen.indexOf(COPY_SAID) === -1, 'live region never says Copied: ' + JSON.stringify(said.seen));
+      let atFire = null;
+      const undo = atWriteTimeout(fn => {
+        focusInApp(copy);
+        fn();
+        atFire = D.activeElement;
+      });
+      try {
+        focusInApp(copy);
+        copy.click();
+        await wait(1500);
+        expectCopyFallback(hero, want, 'before the late resolve', atFire);
+        label = watchText(copy);
+        said = watchText(live);
+        ok(typeof release === 'function', 'the write is still pending');
+        release();
+        await wait(400);
+        eq(copy.textContent, COPY_LABEL, 'late resolve does not say Copied');
+        expectCopyFallback(hero, want, 'after the late resolve', atFire);
+        ok(label.seen.indexOf(COPY_DONE) === -1, 'label never flashes Copied: ' + JSON.stringify(label.seen));
+        ok(said.seen.indexOf(COPY_SAID) === -1, 'live region never says Copied: ' + JSON.stringify(said.seen));
+      } finally {
+        undo();
+      }
     } finally {
       if (label) label.stop();
       if (said) said.stop();
