@@ -358,7 +358,8 @@
   // Copy for Claude: copies core.projectClipboardText(p); the label says Copied for 2s and the
   // live region says it once per click. No clipboard, a refused write, or a writeText still
   // pending after ~1s: a read-only textarea under the buttons holds the text, all selected,
-  // with the ⌘C / Ctrl+C hint. A resolve after that timeout does not say Copied. Never saves,
+  // with the ⌘C / Ctrl+C hint. If writeText succeeds late (after that timeout fired), the
+  // manual-copy box stays visible (intended) and the label does not say Copied. Never saves,
   // scrolls, or marks anything done. renderRecs may redraw the card while a write is pending
   // or a timer runs; late callbacks find their nodes detached and leave them alone.
   const COPY_LABEL = 'Copy for Claude';
@@ -422,9 +423,13 @@
       }
       fallback.hidden = false;
       area.value = text;
+      // Focus the box only if it is still on this button or the body. A click that never
+      // moved focus (Safari leaves it on the body) should land in the box; if the user has
+      // moved elsewhere while writeText was pending, leave that focus alone.
       // preventScroll: the textarea can open below the fold; the page stays where it is.
       // No live announcement: focus reads the hint through aria-describedby.
-      area.focus({ preventScroll: true });
+      const active = document.activeElement;
+      if (active === button || active === document.body) area.focus({ preventScroll: true });
       area.setSelectionRange(0, area.value.length);
     }
 
@@ -444,7 +449,8 @@
         write = null;
       }
       if (write && typeof write.then === 'function') {
-        // Race the write against a timer. A late resolve after the timer must not say Copied.
+        // Race the write against a timer. If writeText succeeds late (after the timeout fired),
+        // the manual-copy box stays visible (intended) and the label does not say Copied.
         let settled = false;
         let timer = 0;
         const finish = ok => {

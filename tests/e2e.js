@@ -1760,6 +1760,7 @@
           await wait(80);
           const copy = copyBtnOf(hero);
           const want = copyText(projectOf(hero));
+          copy.focus({ preventScroll: true });
           copy.click();
           await wait(150);
           const areas = shownAreas(hero);
@@ -1903,19 +1904,41 @@
     instantScroll(true);
     const clip = fakeClipboard(writeOk);
     const restore = setClipboard(clip);
+    const realSet = W.setTimeout;
+    const realClear = W.clearTimeout;
+    const armed = [];
+    const cleared = [];
+    let spying = false;
     try {
       const hero = await heroForCopy();
       const copy = copyBtnOf(hero);
+      // The settled flag would hide a timer that was left running, so watch clearTimeout itself.
+      W.setTimeout = function (fn, ms) {
+        const id = realSet.apply(W, arguments);
+        if (ms === 1000) armed.push(id);
+        return id;
+      };
+      W.clearTimeout = function (id) {
+        cleared.push(id);
+        return realClear.call(W, id);
+      };
+      spying = true;
       copy.click();
       await wait(0);
       eq(clip.writes.length, 1, 'one write');
       eq(copy.textContent, COPY_DONE, 'Copied as soon as the write resolves');
       eq(shownAreas(hero).length, 0, 'no textarea');
+      eq(armed.length, 1, 'one 1s write timer');
+      ok(cleared.indexOf(armed[0]) !== -1, 'clearTimeout was called with that timer');
       await wait(1200);
       eq(copy.textContent, COPY_DONE, 'still Copied 1.2s later: the 1s write timer did not open the fallback');
       eq(shownAreas(hero).length, 0, 'still no textarea');
       eq(liveOf(hero).textContent, COPY_SAID, 'live region still says Copied');
     } finally {
+      if (spying) {
+        W.setTimeout = realSet;
+        W.clearTimeout = realClear;
+      }
       restore();
       instantScroll(false);
     }
@@ -1929,6 +1952,7 @@
       const hero = await heroForCopy();
       const copy = copyBtnOf(hero);
       const want = copyText(projectOf(hero));
+      copy.focus({ preventScroll: true });
       copy.click();
       await wait(0);
       eq(clip.writes.length, 1, 'tried the clipboard');
@@ -1939,6 +1963,49 @@
       eq(liveOf(hero).textContent, '', 'live region quiet while pending');
       await wait(1300);
       expectCopyFallback(hero, want, 'within 1.5s');
+    } finally {
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude when the fallback opens: focus moves into the box if it is still on the button or the body, and stays put if it moved elsewhere during the write', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(() => new W.Promise(() => {}));
+    const restore = setClipboard(clip);
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      const elsewhere = hero.querySelector('.done-btn');
+      const want = copyText(projectOf(hero));
+
+      // .click() does not focus. A real click does, so put focus on the button, then move it
+      // away before the timeout, the way a user would tab to Mark done while the write hangs.
+      copy.focus({ preventScroll: true });
+      copy.click();
+      eq(D.activeElement, copy, 'focus is on the button while the write is pending');
+      elsewhere.focus({ preventScroll: true });
+      eq(D.activeElement, elsewhere, 'focus moved to Mark done before the timeout');
+      await wait(1500);
+      const areas = shownAreas(hero);
+      eq(areas.length, 1, 'the fallback box opened');
+      eq(areas[0].value, want, 'the box holds the project text');
+      eq(areas[0].selectionStart + '–' + areas[0].selectionEnd, '0–' + want.length, 'all of it selected');
+      eq(D.activeElement, elsewhere, 'focus stays on Mark done: the box does not take it');
+
+      copy.focus({ preventScroll: true });
+      copy.click();
+      eq(D.activeElement, copy, 'focus is on the button while the next write is pending');
+      await wait(1500);
+      eq(shownAreas(hero).length, 1, 'still the one box');
+      eq(D.activeElement, areas[0], 'focus moves from the button into the box');
+
+      copy.focus({ preventScroll: true });
+      copy.click();
+      copy.blur();
+      eq(D.activeElement, D.body, 'focus is on the body while the next write is pending');
+      await wait(1500);
+      eq(D.activeElement, areas[0], 'focus moves from the body into the box');
     } finally {
       restore();
       instantScroll(false);
@@ -1957,6 +2024,7 @@
       const copy = copyBtnOf(hero);
       const live = liveOf(hero);
       const want = copyText(projectOf(hero));
+      copy.focus({ preventScroll: true });
       copy.click();
       await wait(1500);
       expectCopyFallback(hero, want, 'before the late resolve');
