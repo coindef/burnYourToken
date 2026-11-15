@@ -356,8 +356,9 @@
   }
 
   // Copy for Claude: copies core.projectClipboardText(p); the label says Copied for 2s and the
-  // live region says it once per click. No clipboard, or a refused write: a read-only textarea
-  // under the buttons holds the text, all selected, with the ⌘C / Ctrl+C hint. Never saves,
+  // live region says it once per click. No clipboard, a refused write, or a writeText still
+  // pending after ~1s: a read-only textarea under the buttons holds the text, all selected,
+  // with the ⌘C / Ctrl+C hint. A resolve after that timeout does not say Copied. Never saves,
   // scrolls, or marks anything done. renderRecs may redraw the card while a write is pending
   // or a timer runs; late callbacks find their nodes detached and leave them alone.
   const COPY_LABEL = 'Copy for Claude';
@@ -366,6 +367,7 @@
   const COPY_HINT = 'Press ⌘C / Ctrl+C';
   const COPY_RESET_MS = 2000;
   const COPY_SAY_MS = 100; // the live region is emptied first, so repeated words are read again
+  const COPY_WRITE_MS = 1000; // a writeText that never settles opens the fallback, same as a refusal
   let copyHintIds = 0;
 
   function copyParts(p) {
@@ -441,8 +443,19 @@
       } catch (e) {
         write = null;
       }
-      if (write && typeof write.then === 'function') write.then(() => settle(true), () => settle(false));
-      else settle(false);
+      if (write && typeof write.then === 'function') {
+        // Race the write against a timer. A late resolve after the timer must not say Copied.
+        let settled = false;
+        let timer = 0;
+        const finish = ok => {
+          if (settled) return; // the timeout already opened the fallback
+          settled = true;
+          clearTimeout(timer);
+          settle(ok);
+        };
+        timer = setTimeout(() => finish(false), COPY_WRITE_MS);
+        write.then(() => finish(true), () => finish(false));
+      } else settle(false);
     });
 
     return { button: button, fallback: fallback, live: live };

@@ -1883,6 +1883,100 @@
     }
   });
 
+  // The same fallback showFallback builds for a rejected write: one read-only textarea, all of
+  // the text selected, the ⌘C / Ctrl+C hint, focus there, and a quiet live region.
+  function expectCopyFallback(hero, want, what) {
+    const areas = shownAreas(hero);
+    eq(areas.length, 1, what + ': one textarea');
+    const ta = areas[0];
+    ok(ta.readOnly, what + ': read-only');
+    eq(ta.value, want, what + ': full text');
+    eq(ta.selectionStart + '–' + ta.selectionEnd, '0–' + want.length, what + ': all selected');
+    eq(D.activeElement, ta, what + ': focus in the textarea');
+    const hint = D.getElementById(ta.getAttribute('aria-describedby') || '');
+    ok(hint && hero.contains(hint) && isShown(hint) && text(hint).trim() === COPY_HINT, what + ': hint');
+    eq(copyBtnOf(hero).textContent, COPY_LABEL, what + ': label does not say Copied');
+    eq(liveOf(hero).textContent, '', what + ': live region stays quiet');
+  }
+
+  test('Copy for Claude when writeText resolves: label says Copied at once, still Copied after 1s, and no fallback opens (the write timer is cleared)', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(writeOk);
+    const restore = setClipboard(clip);
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      copy.click();
+      await wait(0);
+      eq(clip.writes.length, 1, 'one write');
+      eq(copy.textContent, COPY_DONE, 'Copied as soon as the write resolves');
+      eq(shownAreas(hero).length, 0, 'no textarea');
+      await wait(1200);
+      eq(copy.textContent, COPY_DONE, 'still Copied 1.2s later: the 1s write timer did not open the fallback');
+      eq(shownAreas(hero).length, 0, 'still no textarea');
+      eq(liveOf(hero).textContent, COPY_SAID, 'live region still says Copied');
+    } finally {
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude when writeText never settles: still waiting at 200ms; the same read-only fallback as a rejected write is up within 1.5s', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(() => new W.Promise(() => {}));
+    const restore = setClipboard(clip);
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      const want = copyText(projectOf(hero));
+      copy.click();
+      await wait(0);
+      eq(clip.writes.length, 1, 'tried the clipboard');
+      eq(clip.writes[0], want, 'with the full text');
+      await wait(200);
+      eq(shownAreas(hero).length, 0, 'no textarea yet: a hang is not an instant failure');
+      eq(copy.textContent, COPY_LABEL, 'label unchanged while the write is pending');
+      eq(liveOf(hero).textContent, '', 'live region quiet while pending');
+      await wait(1300);
+      expectCopyFallback(hero, want, 'within 1.5s');
+    } finally {
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Copy for Claude when writeText resolves after the 1s timeout: the fallback stays, and the label never flashes Copied', async () => {
+    instantScroll(true);
+    let release = null;
+    const clip = fakeClipboard(() => new W.Promise(resolve => { release = resolve; }));
+    const restore = setClipboard(clip);
+    let label = null;
+    let said = null;
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      const live = liveOf(hero);
+      const want = copyText(projectOf(hero));
+      copy.click();
+      await wait(1500);
+      expectCopyFallback(hero, want, 'before the late resolve');
+      label = watchText(copy);
+      said = watchText(live);
+      ok(typeof release === 'function', 'the write is still pending');
+      release();
+      await wait(400);
+      eq(copy.textContent, COPY_LABEL, 'late resolve does not say Copied');
+      expectCopyFallback(hero, want, 'after the late resolve');
+      ok(label.seen.indexOf(COPY_DONE) === -1, 'label never flashes Copied: ' + JSON.stringify(label.seen));
+      ok(said.seen.indexOf(COPY_SAID) === -1, 'live region never says Copied: ' + JSON.stringify(said.seen));
+    } finally {
+      if (label) label.stop();
+      if (said) said.stop();
+      restore();
+      instantScroll(false);
+    }
+  });
+
   // 「真发一个请求看会不会被拦下」放在 tests/probe.html 里单独跑：被拦下时浏览器一定会在控制台打一条提示，
   // 放在这里会让这套测试的控制台不干净。
   test('不联网：整个流程走完，只加载过本地的 css/js，页面里没有外部地址，也没有表单能提交出去', async () => {
