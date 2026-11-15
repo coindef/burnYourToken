@@ -361,7 +361,8 @@
   // scrolls, or marks anything done. renderRecs may redraw the card while a write is pending
   // or a timer runs; late callbacks find their nodes detached and leave them alone.
   const COPY_LABEL = 'Copy for Claude';
-  const COPY_DONE = 'Copied. Paste it into Claude.';
+  const COPY_DONE = 'Copied. Go paste.'; // the button: short enough to stay on one line, so the row keeps its height
+  const COPY_SAID = 'Copied. Paste it into Claude.'; // the live region: the full sentence
   const COPY_HINT = 'Press ⌘C / Ctrl+C';
   const COPY_RESET_MS = 2000;
   const COPY_SAY_MS = 100; // the live region is emptied first, so repeated words are read again
@@ -404,7 +405,7 @@
         sayTimer = 0;
         live.textContent = '';
       }, COPY_RESET_MS);
-      say(COPY_DONE);
+      say(COPY_SAID);
     }
 
     function showFallback(text) {
@@ -420,9 +421,9 @@
       fallback.hidden = false;
       area.value = text;
       // preventScroll: the textarea can open below the fold; the page stays where it is.
+      // No live announcement: focus reads the hint through aria-describedby.
       area.focus({ preventScroll: true });
       area.setSelectionRange(0, area.value.length);
-      say(COPY_HINT);
     }
 
     button.addEventListener('click', () => {

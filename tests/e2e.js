@@ -1407,7 +1407,8 @@
   // ---------------- Copy for Claude (#27) ----------------
 
   const COPY_LABEL = 'Copy for Claude';
-  const COPY_OK = 'Copied. Paste it into Claude.';
+  const COPY_DONE = 'Copied. Go paste.';
+  const COPY_SAID = 'Copied. Paste it into Claude.';
   const COPY_HINT = 'Press ⌘C / Ctrl+C';
 
   // The issue's plain-text format, written out here so these checks do not reuse core.
@@ -1574,23 +1575,23 @@
       await wait(0);
       eq(clip.writes.length, 1, 'one clipboard write');
       eq(clip.writes[0], copyText(p), 'exact text of ' + p.id);
-      eq(copy.textContent, COPY_OK, 'label once the write resolves');
+      eq(copy.textContent, COPY_DONE, 'label once the write resolves');
       await wait(150);
-      eq(live.textContent, COPY_OK, 'live region says the same text');
+      eq(live.textContent, COPY_SAID, 'live region says the full sentence');
       await wait(850);
-      eq(copy.textContent, COPY_OK, 'still Copied 1s later');
+      eq(copy.textContent, COPY_DONE, 'still Copied 1s later');
       copy.click();
       await wait(0);
       eq(clip.writes.length, 2, 'second click writes again');
       eq(clip.writes[1], clip.writes[0], 'same text');
       await wait(1500);
-      eq(copy.textContent, COPY_OK, '2.5s after the first click, 1.5s after the second: still Copied (first 2s timer dropped)');
+      eq(copy.textContent, COPY_DONE, '2.5s after the first click, 1.5s after the second: still Copied (first 2s timer dropped)');
       await wait(700);
       eq(copy.textContent, COPY_LABEL, 'back to Copy for Claude 2.2s after the second click');
       await wait(2100);
-      eq(label.seen.join(' → '), COPY_OK + ' → ' + COPY_LABEL, 'one swap and exactly one revert');
-      eq(said.seen.filter(t => t === COPY_OK).length, 2, 'announced once per click: ' + JSON.stringify(said.seen));
-      ok(said.seen.every(t => t === COPY_OK || t === ''), 'nothing else announced: ' + JSON.stringify(said.seen));
+      eq(label.seen.join(' → '), COPY_DONE + ' → ' + COPY_LABEL, 'one swap and exactly one revert');
+      eq(said.seen.filter(t => t === COPY_SAID).length, 2, 'announced once per click: ' + JSON.stringify(said.seen));
+      ok(said.seen.every(t => t === COPY_SAID || t === ''), 'nothing else announced: ' + JSON.stringify(said.seen));
       eq(live.textContent, '', 'live region quiet again after the revert');
       eq(D.activeElement, copy, 'focus stays on the button');
       eq(spy.log.length, 0, 'no scrollIntoView and no focus calls: ' + spy.log.map(e => e.kind + ' ' + nodeName(e.node)).join(', '));
@@ -1632,7 +1633,7 @@
       eq(clip.writes[0], copyText(mine), 'custom card text');
       eq(clip.writes[0].split('\n')[0], text(hero.querySelector('h3')), 'first line is the title on the card');
       eq(clip.writes[0].split('\n')[0], 'Make a first piece of “organize the closet”', 'Medium custom title');
-      eq(copyBtnOf(hero).textContent, COPY_OK, 'the custom card says Copied');
+      eq(copyBtnOf(hero).textContent, COPY_DONE, 'the custom card says Copied');
 
       $('overflow').open = true;
       $('recs-more').open = true;
@@ -1645,7 +1646,7 @@
       await wait(0);
       eq(clip.writes.length, 2, 'one write per click');
       eq(clip.writes[1], copyText(projectOf(other)), 'a More projects card copies its own project (' + other.dataset.id + ')');
-      eq(otherBtn.textContent, COPY_OK, 'that card says Copied');
+      eq(otherBtn.textContent, COPY_DONE, 'that card says Copied');
       eq(W.QP.app.state.done.length, 0, 'nothing marked done');
     } finally {
       $('overflow').open = false;
@@ -1704,7 +1705,7 @@
       ok((ta.getAttribute('aria-label') || '').trim().length > 0, 'textarea has an accessible name');
       eq(copy.textContent, COPY_LABEL, 'label does not say Copied');
       await wait(150);
-      eq(live.textContent, COPY_HINT, 'live region says the hint');
+      eq(live.textContent, '', 'live region stays quiet: the hint is already on aria-describedby');
 
       ta.setSelectionRange(2, 3);
       copy.focus({ preventScroll: true });
@@ -1715,7 +1716,7 @@
       eq(ta.value, want, 'same text');
       eq(ta.selectionStart + '–' + ta.selectionEnd, '0–' + want.length, 'all selected again');
       eq(D.activeElement, ta, 'focus back in the textarea');
-      eq(said.seen.filter(t => t === COPY_HINT).length, 2, 'hint announced again: ' + JSON.stringify(said.seen));
+      eq(said.seen.filter(t => t === COPY_HINT).length, 0, 'hint is not announced: ' + JSON.stringify(said.seen));
       eq(W.scrollY, y, 'still no scroll');
       eq(untouched(), before, 'state, saved state, fields, phase, banner, cards and scroll unchanged');
 
@@ -1726,8 +1727,8 @@
       ok(!isShown(ta), 'a later success hides the textarea');
       eq(shownAreas(hero).length, 0, 'nothing left open');
       ok(hero.querySelectorAll('textarea').length <= 1, 'no second textarea');
-      eq(copy.textContent, COPY_OK, 'Copied');
-      eq(live.textContent, COPY_OK, 'live region says Copied');
+      eq(copy.textContent, COPY_DONE, 'Copied');
+      eq(live.textContent, COPY_SAID, 'live region says Copied');
       eq(D.activeElement, copy, 'focus on the button, not lost with the hidden textarea');
       eq(W.scrollY, y, 'no scroll on success either');
       eq(spy.log.filter(e => e.kind === 'scroll').length, 0, 'no scrollIntoView at all');
@@ -1771,7 +1772,7 @@
           const hint = D.getElementById(ta.getAttribute('aria-describedby') || '');
           ok(hint && isShown(hint) && text(hint).trim() === COPY_HINT, what + ': hint');
           eq(copy.textContent, COPY_LABEL, what + ': label does not say Copied');
-          eq(liveOf(hero).textContent, COPY_HINT, what + ': hint announced');
+          eq(liveOf(hero).textContent, '', what + ': live region stays quiet (hint is on aria-describedby)');
           ok(D.documentElement.scrollWidth <= W.innerWidth + 1, what + ': no horizontal scroll at 320px');
           ok(ta.getBoundingClientRect().right <= hero.getBoundingClientRect().right + 0.5, what + ': textarea inside the card at 320px');
           copy.click();
@@ -1783,6 +1784,38 @@
         }
       }
     } finally {
+      instantScroll(false);
+    }
+  });
+
+
+  test('Copy for Claude: at 375 and 1280, .card-actions keeps its height after a successful copy', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(writeOk);
+    const restore = setClipboard(clip);
+    try {
+      await heroForCopy();
+      for (const width of [375, 1280]) {
+        frame.style.width = width + 'px';
+        await wait(80);
+        const card = cards()[0];
+        const row = card.querySelector('.card-actions');
+        const copy = copyBtnOf(card);
+        eq(copy.textContent, COPY_LABEL, width + 'px: starts as Copy for Claude');
+        const before = row.offsetHeight;
+        ok(before > 0, width + 'px: .card-actions has a height');
+        copy.click();
+        await wait(0);
+        eq(copy.textContent, COPY_DONE, width + 'px: button says Copied. Go paste.');
+        eq(row.offsetHeight, before, width + 'px: .card-actions height unchanged after copy (' + before + ')');
+        await wait(150);
+        eq(liveOf(card).textContent, COPY_SAID, width + 'px: live region still says Copied. Paste it into Claude.');
+        await wait(2100);
+        eq(copy.textContent, COPY_LABEL, width + 'px: label reverted');
+      }
+    } finally {
+      restore();
+      frame.style.width = '';
       instantScroll(false);
     }
   });
@@ -1825,7 +1858,7 @@
       const old = cards()[0];
       copyBtnOf(old).click();
       await wait(0);
-      eq(copyBtnOf(old).textContent, COPY_OK, 'Copied');
+      eq(copyBtnOf(old).textContent, COPY_DONE, 'Copied');
       redraw();
       const now = cards()[0];
       ok(!old.isConnected, 're-drawn inside the 2s');
