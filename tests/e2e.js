@@ -1132,7 +1132,7 @@
       });
       eq(cards().concat(moreCards()).filter(n => n.dataset.band === c[1]).length, bandCount(c[1]), c[1] + '：其余同档在 More projects');
       ok(!$('recs-more').hidden, 'More projects 收着其余的');
-      ok(statusText().indexOf('skipped') !== -1, '状态里说了是跳过的');
+      ok(statusText().indexOf('No preferences yet. Picks go best fit first.') !== -1, '状态里说了还没有偏好');
       eq($('skip-btn').textContent.trim(), 'Skip to recommendations');
     });
   });
@@ -2257,13 +2257,13 @@
     }
   });
 
-  test('Not this one: with no preferences the status line says picks come in band order, which stays true after a swap, once the band runs out, and on a redraw (it never claims the first project)', async () => {
+  test('Not this one: with no preferences the status line says picks go best fit first, which stays true after a swap, once the band runs out, and on a redraw (it never claims the first project)', async () => {
     instantScroll(true);
     try {
       await fresh();
       fill('claude', { s: 85, w: 30 }); // Small
       calc();
-      const line = 'No preferences yet (or you skipped). Picks come in band order.';
+      const line = 'No preferences yet. Picks go best fit first.';
       ok(statusText().indexOf(line) !== -1, 'after Get project: ' + statusText());
       notBtn().click();
       ok(statusText().indexOf(line) !== -1 && statusText().indexOf('first project') === -1, 'after a swap: ' + statusText());
