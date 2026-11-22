@@ -355,6 +355,30 @@
     return why.band || '';
   }
 
+  // A polite live region's voice, for a line a screen reader should hear once. say() empties
+  // the region and puts the words in SAY_MS later, so the same words twice are read twice;
+  // hush() empties it and drops a say that is still waiting. A region that has left the page
+  // (its card was re-drawn) is left alone.
+  const SAY_MS = 100;
+  function voiceOf(live) {
+    let timer = 0;
+    return {
+      say(text) {
+        clearTimeout(timer);
+        live.textContent = '';
+        timer = setTimeout(() => {
+          timer = 0;
+          if (live.isConnected) live.textContent = text;
+        }, SAY_MS);
+      },
+      hush() {
+        clearTimeout(timer);
+        timer = 0;
+        live.textContent = '';
+      }
+    };
+  }
+
   // Copy for Claude: copies core.projectClipboardText(p); the label says Copied for 2s and the
   // live region says it once per click. No clipboard, a refused write, or a writeText still
   // pending after ~1s: a read-only textarea under the buttons holds the text, all selected,
@@ -367,7 +391,6 @@
   const COPY_SAID = 'Copied. Paste it into Claude.'; // the live region: the full sentence
   const COPY_HINT = 'Press ⌘C / Ctrl+C';
   const COPY_RESET_MS = 2000;
-  const COPY_SAY_MS = 100; // the live region is emptied first, so repeated words are read again
   const COPY_WRITE_MS = 1000; // a writeText that never settles opens the fallback, same as a refusal
   let copyHintIds = 0;
 
@@ -376,22 +399,13 @@
     const fallback = el('div', { class: 'copy-fallback' });
     fallback.hidden = true;
     const live = el('p', { class: 'visually-hidden', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    const voice = voiceOf(live);
     let area = null; // made on the first failed copy, then reused
     let clicks = 0;
     let resetTimer = 0;
-    let sayTimer = 0;
 
     function setLabel(text) {
       if (button.textContent !== text) button.textContent = text;
-    }
-
-    function say(text) {
-      clearTimeout(sayTimer);
-      live.textContent = '';
-      sayTimer = setTimeout(() => {
-        sayTimer = 0;
-        if (live.isConnected) live.textContent = text;
-      }, COPY_SAY_MS);
     }
 
     function copied() {
@@ -404,11 +418,9 @@
         resetTimer = 0;
         if (!button.isConnected) return;
         setLabel(COPY_LABEL);
-        clearTimeout(sayTimer);
-        sayTimer = 0;
-        live.textContent = '';
+        voice.hush();
       }, COPY_RESET_MS);
-      say(COPY_SAID);
+      voice.say(COPY_SAID);
     }
 
     function showFallback(text) {
