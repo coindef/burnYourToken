@@ -2252,6 +2252,26 @@
     }
   });
 
+  test('Not this one: with no preferences the status line says picks come in band order, which stays true after a swap, once the band runs out, and on a redraw (it never claims the first project)', async () => {
+    instantScroll(true);
+    try {
+      await fresh();
+      fill('claude', { s: 85, w: 30 }); // Small
+      calc();
+      const line = 'No preferences yet (or you skipped). Picks come in band order.';
+      ok(statusText().indexOf(line) !== -1, 'after Get project: ' + statusText());
+      notBtn().click();
+      ok(statusText().indexOf(line) !== -1 && statusText().indexOf('first project') === -1, 'after a swap: ' + statusText());
+      while (isShown(notBtn())) notBtn().click();
+      eq(text($('recs-list')), PICKS_OUT, 'band ran out');
+      ok(statusText().indexOf('first project') === -1, 'band ran out: ' + statusText());
+      setVal('q-other', ''); // a redraw with every pick skipped
+      ok(statusText().indexOf(line) !== -1 && statusText().indexOf('first project') === -1, 'redrawn: ' + statusText());
+    } finally {
+      instantScroll(false);
+    }
+  });
+
   test('Not this one does not scroll (reduced motion on or off) and keeps focus on the button; screen readers hear one line, "New pick: <title>", and the status lines under the card stay as they are', async () => {
     for (const reduce of [false, true]) {
       const tag = (reduce ? 'reduce' : 'no-preference') + ': ';

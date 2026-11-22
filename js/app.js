@@ -578,7 +578,8 @@
     if (state.edited) status("You changed the numbers and haven't clicked Get project. The project below still uses the last result.", 'warn');
 
     if (!rec.personalized) {
-      status('No preferences yet (or you skipped). This is the first project in the band.');
+      // True for every pick: Not this one swaps the card without redrawing these lines.
+      status('No preferences yet (or you skipped). Picks come in band order.');
     } else {
       const label = (list, id) => (list.find(x => x.id === id) || { label: id }).label;
       const picked = quiz.domains.map(core.domainLabel).concat(quiz.other.trim() ? [quiz.other.trim()] : []);
