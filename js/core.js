@@ -478,6 +478,52 @@
     return blocks.join('\n\n');
   }
 
+  // ---------------- Not this one (#33): one pick at a time ----------------
+
+  // What the card area says once Not this one has passed over every pick for this quota.
+  const PICKS_OUT = "That's every pick that fits this quota. Change your answers or come back after the reset.";
+
+  /*
+   * The main path's one card, from recommend()'s result and the ids Not this one passed over.
+   * band is the band computeService worked out from Session, Weekly and Resets in.
+   * The picks are recommend()'s projects of exactly that band, in its own order: cards (by
+   * score, with the card built from what you wrote among them), then others. Smaller projects
+   * are never picks and nothing outside the band ever is, so a skip never goes bigger than
+   * the quota fits. Returns {
+   *   picks:   those picks, skipped or not
+   *   pick:    the first pick not skipped, or null
+   *   out:     there were picks and every one is skipped: the band ran out
+   *   message: PICKS_OUT when out, else ''
+   *   more:    what More projects lists: every other pick (skipped ones too), then the smaller ones
+   * }
+   */
+  function onePick(rec, band, skipped) {
+    const list = v => (Array.isArray(v) ? v : []);
+    const r = rec || {};
+    const passed = list(skipped);
+    const picks = list(r.cards).concat(list(r.others)).filter(p => p && p.band === band);
+    const pick = picks.find(p => passed.indexOf(p.id) === -1) || null;
+    const out = !pick && picks.length > 0;
+    return {
+      picks: picks, pick: pick, out: out, message: out ? PICKS_OUT : '',
+      more: picks.filter(p => p !== pick).concat(list(r.smaller))
+    };
+  }
+
+  // Not this one's skip list after an action, always as a new list:
+  //   'not-this-one' with id — adds the id, once
+  //   'get-project', 'fill-again' — empty: Get project again or Fill again starts the band over
+  //   anything else keeps it: a plain Fill only copies numbers, and a quiz edit, Copy for Claude
+  //   or Mark done never brings a skipped project back as the pick
+  // Ids that are not strings are dropped.
+  const SKIP_RESETS = ['get-project', 'fill-again'];
+  function skipsAfter(skipped, action, id) {
+    if (SKIP_RESETS.indexOf(action) !== -1) return [];
+    const list = (Array.isArray(skipped) ? skipped : []).filter(x => typeof x === 'string');
+    if (action === 'not-this-one' && typeof id === 'string' && id && list.indexOf(id) === -1) list.push(id);
+    return list;
+  }
+
   // First-visit Fill path. The page applies this; it does not auto-run Get project or Mark done.
   //   first   — before a successful Fill (or sample / restored numbers)
   //   filled  — numbers are in; the user has not clicked Get project
@@ -529,6 +575,7 @@
     computeService: computeService,
     domainLabel: domainLabel, customProject: customProject, recommend: recommend,
     projectClipboardText: projectClipboardText,
+    PICKS_OUT: PICKS_OUT, onePick: onePick, skipsAfter: skipsAfter,
     onboardingView: onboardingView, scrollBehaviorFor: scrollBehaviorFor
   };
 })();
