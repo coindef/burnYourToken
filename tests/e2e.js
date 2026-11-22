@@ -1132,7 +1132,7 @@
       });
       eq(cards().concat(moreCards()).filter(n => n.dataset.band === c[1]).length, bandCount(c[1]), c[1] + '：其余同档在 More projects');
       ok(!$('recs-more').hidden, 'More projects 收着其余的');
-      ok(statusText().indexOf('No preferences yet. Picks go best fit first.') !== -1, '状态里说了还没有偏好');
+      ok(statusText().indexOf('No preferences yet. Picks go in list order.') !== -1, '状态里说了还没有偏好');
       eq($('skip-btn').textContent.trim(), 'Skip to recommendations');
     });
   });
@@ -2257,13 +2257,13 @@
     }
   });
 
-  test('Not this one: with no preferences the status line says picks go best fit first, which stays true after a swap, once the band runs out, and on a redraw (it never claims the first project)', async () => {
+  test('Not this one: with no preferences the status line says picks go in list order, which stays true after a swap, once the band runs out, and on a redraw (it never claims the first project)', async () => {
     instantScroll(true);
     try {
       await fresh();
       fill('claude', { s: 85, w: 30 }); // Small
       calc();
-      const line = 'No preferences yet. Picks go best fit first.';
+      const line = 'No preferences yet. Picks go in list order.';
       ok(statusText().indexOf(line) !== -1, 'after Get project: ' + statusText());
       notBtn().click();
       ok(statusText().indexOf(line) !== -1 && statusText().indexOf('first project') === -1, 'after a swap: ' + statusText());
@@ -2337,6 +2337,24 @@
         instantScroll(false);
         frame.style.height = '';
       }
+    }
+  });
+
+  test('Not this one: a full redraw before the New pick line is read drops it, so screen readers never hear a title the card no longer shows', async () => {
+    let live = null;
+    try {
+      await fresh();
+      fill('claude', { s: 72, h: 3, m: 12, w: 31 }); // Medium
+      calc();
+      await wait(0);
+      live = watchLive();
+      notBtn().click(); // queues "New pick: <title>" SAY_MS later
+      calc(); // Get project redraws the card before that line is read
+      await wait(150);
+      eq(text($('pick-live')), '', 'the live region is empty after the redraw');
+      eq(live.lines().filter(l => l.indexOf(NEW_PICK) === 0).length, 0, 'no New pick line was heard: ' + live.lines().join(' | '));
+    } finally {
+      if (live) live.stop();
     }
   });
 

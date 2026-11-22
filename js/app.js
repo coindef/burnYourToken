@@ -580,7 +580,7 @@
 
     if (!rec.personalized) {
       // True for every pick: Not this one swaps the card without redrawing these lines.
-      status('No preferences yet. Picks go best fit first.');
+      status('No preferences yet. Picks go in list order.');
     } else {
       const label = (list, id) => (list.find(x => x.id === id) || { label: id }).label;
       const picked = quiz.domains.map(core.domainLabel).concat(quiz.other.trim() ? [quiz.other.trim()] : []);

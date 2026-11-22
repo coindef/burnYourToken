@@ -35,7 +35,7 @@ Star the repo if the Fill→Mark done loop helped.
 - **One** full-width recommendation. **Get project** is the click that shows it. The main path does not add a second card.
 - **Mark done** is explicit. The project stays unfinished until you click it.
 - **Copy for Claude** on the card copies the project as plain text (title, what you’ll end with, steps, done when) to paste into Claude. Copying does not mark it done.
-- **Not this one** under the card swaps in the next pick that fits the same quota, never a bigger one. Skips last until **Get project** or **Fill again**, and nothing is marked done.
+- **Not this one** under the card swaps in the next pick that fits the same quota, never a bigger one. Skips last until **Get project**, **Fill again** or **Clear**, and nothing is marked done.
 
 *Usage monitors show leftover quota. burnYourToken fills IDLE / UNUSED into one pick, then Mark done — nothing auto-burns.*
 
