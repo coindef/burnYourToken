@@ -12,6 +12,9 @@
  * rests where scrollIntoView alone puts the target, and the settled position holds
  * for HOLD_FRAMES more frames); and a real Tab key moves focus to the next
  * tabbable element after the target, worked out by a DOM walk.
+ *
+ * Not this one (#33) swaps the card and must not move the page at all, with either
+ * preference: its rows expect 'still' (see judgeStill).
  * The key comes from the runner: window.bytMotionKey is a CDP Runtime.addBinding,
  * and motion_run.py answers each call with Input.dispatchKeyEvent (rawKeyDown,
  * then keyUp). A synthetic KeyboardEvent would not move focus.
@@ -380,6 +383,59 @@
     return Object.assign(motion, await tabCheck(getBtn));
   }
 
+  // Not this one: a fresh hero, then one click with the page parked so the card's top is above
+  // the viewport and the button is in view. A scrollIntoView, or a focus() without
+  // preventScroll, would show up as movement, and so would the page getting shorter (the
+  // browser pulls the scroll position up when it sits near the bottom). last: first skip to
+  // the band's last pick, so the click runs the band out. Either way focus stays on the button
+  // and Tab goes on from it.
+  async function runNotThisOne(last) {
+    await prepareGet();
+    D.getElementById('calc-btn').click();
+    await settled();
+    const btn = D.getElementById('not-this-btn');
+    if (!btn || btn.closest('[hidden]')) throw new Error('no Not this one under the card');
+    if (last) {
+      const band = D.getElementById('band-chips').dataset.band;
+      const picks = W.QP.PROJECTS.filter(p => p.band === band).length;
+      for (let i = 1; i < picks; i++) btn.click();
+    }
+    const card = D.querySelector('#recs-list .card');
+    const max = D.scrollingElement.scrollHeight - D.documentElement.clientHeight;
+    const top = Math.round(Math.min(scrollTop() + card.getBoundingClientRect().top + 60, max - 40));
+    await park(top);
+    if (!inView(btn)) throw new Error('Not this one is not in view at ' + top);
+    btn.focus({ preventScroll: true }); // a real click focuses the button; .click() does not
+    const motion = await watch(() => btn.click());
+    const out = D.querySelector('#recs-list .pick-out');
+    Object.assign(motion, {
+      action: last ? 'Not this one (band ran out)' : 'Not this one',
+      focus: focusDesc(),
+      focusOk: D.activeElement === btn && (last ? !!out && btn.getAttribute('aria-disabled') === 'true' : !out),
+      placeOk: inView(btn),
+      restTop: motion.before
+    });
+    return Object.assign(motion, await tabCheck(btn));
+  }
+
+  // A 'still' row: no jump during the click, no creep in the frames after, the position
+  // holds, focus is on the target, and Tab goes on from there.
+  function judgeStill(row) {
+    const problems = [];
+    const moved = row.uniq.length > 1 || row.travel > 1 || row.movedDuringCall > 1;
+    if (moved) problems.push('the page moved: ' + row.uniq.join(' → '));
+    if (!row.settled) problems.push('scroll did not settle before the frame cap');
+    if (!row.held) problems.push('moved after settling: ' + row.settledTop + ' → ' + row.heldTop);
+    if (!row.focusOk) problems.push('focus ' + row.focus);
+    if (!row.placeOk) problems.push('target not in view');
+    if (!row.tabOk) problems.push('Tab went to ' + row.tabActual + ', expected ' + row.tabExpected);
+    if (!moved) row.kind = 'still';
+    row.ok = problems.length === 0;
+    row.problems = problems;
+    row.expect = 'still';
+    return row;
+  }
+
   function judge(row, expectKind) {
     const problems = [];
     if (!row.settled) problems.push('scroll did not settle before the frame cap');
@@ -409,6 +465,8 @@
     rows.push(judge(await runGet(), expectKind));
     rows.push(judge(await runMarkDone(), expectKind));
     rows.push(judge(await runFillAgain(), expectKind));
+    rows.push(judgeStill(await runNotThisOne(false)));
+    rows.push(judgeStill(await runNotThisOne(true)));
     // The emulated preference must reach both matchMedia and the CSS cascade:
     // css/style.css smooths html only for no-preference.
     const media = mediaNow();
