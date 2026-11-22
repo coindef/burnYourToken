@@ -36,7 +36,8 @@
     lastDone: '',
     filled: false, // a Fill succeeded since the last Mark done / Clear
     usageReady: false, // true after Fill succeeds, Try sample, or restored numbers
-    manual: false // Fill found no extension: show the fields so people can type by hand
+    manual: false, // Fill found no extension: show the fields so people can type by hand
+    skipped: [] // Not this one (#33): project ids passed over; Get project and Fill again empty it
   };
 
   const $ = id => document.getElementById(id);
@@ -225,6 +226,7 @@
     state.computedAt = now;
     state.edited = false;
     state.stale = false;
+    state.skipped = core.skipsAfter(state.skipped, 'get-project');
     $('restore-note').hidden = true;
     save();
     renderResults();
@@ -526,13 +528,10 @@
   }
 
   function renderRecsBody() {
-    const list = $('recs-list');
-    const moreBox = $('recs-more');
-    const moreList = $('more-list');
     $('recs-status').textContent = '';
-    list.textContent = '';
-    moreList.textContent = '';
-    moreBox.hidden = true;
+    shownRec = null;
+    drawPick();
+    pickVoice.hush(); // a New pick line from an earlier swap no longer describes the card
     $('done-banner').hidden = !state.stale;
     renderChips(null, null);
 
@@ -602,15 +601,77 @@
     } else if (rec.fallback) {
       status('Nothing in this band matches what you picked, so here is the whole band.', 'warn');
     }
-    // 主列表只放这一档排第一的一张。其余同档和更小的档收进 More projects。
+    shownRec = { rec: rec, band: r.band };
+    drawPick();
+  }
+
+  // ---------------- Not this one (#33) ----------------
+
+  // What the card area is drawn from: recommend()'s result and the band it was made for, or
+  // null while the recommendations show no card (no result, stale, nothing left, bad numbers).
+  let shownRec = null;
+  let pickVoice = null; // voiceOf(#pick-live), set in init()
+  const NEW_PICK = 'New pick: ';
+
+  // The card area: the one pick (core.onePick: the band's first project not skipped) with Not
+  // this one under it, or once the band has run out, its line in the card's place. More
+  // projects lists every other project. Returns onePick's view, or null with no shownRec.
+  function drawPick() {
+    const list = $('recs-list');
+    const moreBox = $('recs-more');
+    const moreList = $('more-list');
+    const row = $('not-this-row');
+    list.textContent = '';
+    moreList.textContent = '';
+    moreBox.hidden = true;
+    row.hidden = true;
+    if (!shownRec) return null;
+    const one = core.onePick(shownRec.rec, shownRec.band, state.skipped);
     const view = core.onboardingView('project');
-    const primary = rec.cards[0] || null;
-    const extra = rec.cards.slice(primary ? 1 : 0).concat(rec.others, rec.smaller);
-    if (primary && view.heroCount === 1) list.appendChild(card(primary, true));
+    if (one.pick && view.heroCount === 1) {
+      list.appendChild(card(one.pick, true));
+      row.hidden = false;
+    } else if (one.out) {
+      list.appendChild(el('p', { class: 'pick-out', tabindex: '-1', text: one.message }));
+    }
     while (list.children.length > 1) list.removeChild(list.lastChild);
-    if (extra.length) {
+    if (one.more.length) {
       moreBox.hidden = false;
-      extra.forEach(p => moreList.appendChild(card(p)));
+      one.more.forEach(p => moreList.appendChild(card(p)));
+    }
+    return one;
+  }
+
+  // Not this one: swaps the hero for the next project of the same band. Only the card area,
+  // More projects and the skip list change (saved like the preferences): nothing is marked
+  // done, nothing scrolls, and #recs-status is left alone so its lines are not read again.
+  // The one line a screen reader hears is "New pick: <title>". Focus stays on the button;
+  // focus that was in the old card (Safari leaves a click's focus where it was) moves to the
+  // button instead of dropping to the page. When the band runs out, the card area shows
+  // core.PICKS_OUT and the button hides: focus on the button, in the old card or on the body
+  // moves to that line without scrolling, and reading it is the one line (no live
+  // announcement on top); focus anywhere else stays put and the live region says the line.
+  function notThisOne() {
+    if (!shownRec) return;
+    const now = core.onePick(shownRec.rec, shownRec.band, state.skipped);
+    if (!now.pick) return;
+    const btn = $('not-this-btn');
+    const active = document.activeElement;
+    state.skipped = core.skipsAfter(state.skipped, 'not-this-one', now.pick.id);
+    save();
+    const next = drawPick();
+    const lost = !!active && active !== document.body && !active.isConnected;
+    if (next.pick) {
+      if (lost) btn.focus({ preventScroll: true });
+      pickVoice.say(NEW_PICK + next.pick.title);
+      return;
+    }
+    const line = $('recs-list').querySelector('.pick-out');
+    if (line && (!active || lost || active === btn || active === document.body)) {
+      pickVoice.hush();
+      line.focus({ preventScroll: true });
+    } else {
+      pickVoice.say(next.message);
     }
   }
 
@@ -679,8 +740,9 @@
   }
 
   // Fill again: back to step 1 and run Fill directly. Get project stays a separate click.
-  // Starts fresh: drops the done banner, old result and old numbers (plan and used/left stay),
-  // so only Fill's own status shows. The finished list stays for "Finished N this round".
+  // Starts fresh: drops the done banner, old result, old numbers (plan and used/left stay) and
+  // the Not this one skips, so only Fill's own status shows. The finished list stays for
+  // "Finished N this round".
   function goRecalc() {
     state.stale = false;
     state.computedAt = null;
@@ -688,6 +750,7 @@
     state.edited = false;
     state.usageReady = false;
     state.filled = false;
+    state.skipped = core.skipsAfter(state.skipped, 'fill-again');
     ['-s-pct', '-s-h', '-s-m', '-s-clock', '-w-pct', '-w-day', '-w-clock'].forEach(suffix => {
       const n = $('claude' + suffix);
       if (n) n.value = '';
@@ -706,7 +769,8 @@
   function save() {
     const data = {
       v: 1, inputs: {}, quiz: readQuiz(),
-      done: state.done, doneTitles: state.doneTitles, lastDone: state.lastDone, stale: state.stale
+      done: state.done, doneTitles: state.doneTitles, lastDone: state.lastDone, stale: state.stale,
+      skipped: state.skipped
     };
     shownServices().forEach(s => { data.inputs[s.id] = readService(s.id); });
     try { sessionStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { /* 存不了也不影响使用 */ }
@@ -720,6 +784,7 @@
     writeQuiz(data.quiz || {});
     state.done = Array.isArray(data.done) ? data.done.filter(x => typeof x === 'string') : [];
     state.doneTitles = Array.isArray(data.doneTitles) ? data.doneTitles.filter(x => typeof x === 'string') : [];
+    state.skipped = Array.isArray(data.skipped) ? data.skipped.filter(x => typeof x === 'string') : [];
     state.lastDone = typeof data.lastDone === 'string' ? data.lastDone : '';
     state.stale = !!data.stale && !!state.lastDone;
     state.usageReady = inputsReady();
@@ -918,7 +983,7 @@
     try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* 没存过 */ }
     $('calc-form').reset();
     $('quiz-form').reset();
-    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false, filled: false, manual: false });
+    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false, filled: false, manual: false, skipped: [] });
     shownServices().forEach(s => { togglePlan(s.id); syncModeLabels(s.id); });
     clearInvalid();
     $('restore-note').hidden = true;
@@ -977,6 +1042,8 @@
     $('example-btn').addEventListener('click', fillExample);
     $('skip-btn').addEventListener('click', skipQuiz);
     $('recalc-btn').addEventListener('click', goRecalc);
+    pickVoice = voiceOf($('pick-live'));
+    $('not-this-btn').addEventListener('click', notThisOne);
 
     restore();
     // index.html marks both Fill buttons primary; pick one so a reload in the done state keeps one primary.

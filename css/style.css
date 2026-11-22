@@ -455,6 +455,29 @@ button {
   resize: vertical;
 }
 .copy-fallback .hint { margin: 6px 0 0; }
+/* Not this one (#33): a small text button under the one card, and the line that takes the
+   card's place once the band runs out (focused by script only, like #recs-title). */
+.not-this-row { margin: 6px 0 0; text-align: center; }
+.text-btn {
+  background: none;
+  border: 0;
+  padding: 10px 14px;
+  color: var(--accent-dark);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.text-btn:hover { color: var(--text); }
+.pick-out {
+  margin: 0;
+  padding: 20px;
+  border: 1px dashed #b9b2a4;
+  border-radius: 16px;
+  background: var(--paper);
+  font-size: 17px;
+}
+.pick-out:focus { outline: none; }
 
 .done-banner {
   margin: 10px 0 14px;
