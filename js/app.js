@@ -530,6 +530,7 @@
   function renderRecsBody() {
     $('recs-status').textContent = '';
     shownRec = null;
+    $('recs-list').style.minHeight = ''; // a full redraw lets the card area take its own height
     drawPick();
     pickVoice.hush(); // a New pick line from an earlier swap no longer describes the card
     $('done-banner').hidden = !state.stale;
@@ -617,15 +618,19 @@
   // The card area: the one pick (core.onePick: the band's first project not skipped) with Not
   // this one under it, or once the band has run out, its line in the card's place. More
   // projects lists every other project. Returns onePick's view, or null with no shownRec.
+  // Out of picks, the button stays put but does nothing: aria-disabled rather than disabled,
+  // because a disabled button drops the focus it holds to the page.
   function drawPick() {
     const list = $('recs-list');
     const moreBox = $('recs-more');
     const moreList = $('more-list');
     const row = $('not-this-row');
+    const btn = $('not-this-btn');
     list.textContent = '';
     moreList.textContent = '';
     moreBox.hidden = true;
     row.hidden = true;
+    btn.removeAttribute('aria-disabled');
     if (!shownRec) return null;
     const one = core.onePick(shownRec.rec, shownRec.band, state.skipped);
     const view = core.onboardingView('project');
@@ -633,7 +638,9 @@
       list.appendChild(card(one.pick, true));
       row.hidden = false;
     } else if (one.out) {
-      list.appendChild(el('p', { class: 'pick-out', tabindex: '-1', text: one.message }));
+      list.appendChild(el('p', { class: 'pick-out', text: one.message }));
+      row.hidden = false;
+      btn.setAttribute('aria-disabled', 'true');
     }
     while (list.children.length > 1) list.removeChild(list.lastChild);
     if (one.more.length) {
@@ -646,34 +653,28 @@
   // Not this one: swaps the hero for the next project of the same band. Only the card area,
   // More projects and the skip list change (saved like the preferences): nothing is marked
   // done, nothing scrolls, and #recs-status is left alone so its lines are not read again.
-  // The one line a screen reader hears is "New pick: <title>". Focus stays on the button;
-  // focus that was in the old card (Safari leaves a click's focus where it was) moves to the
-  // button instead of dropping to the page. When the band runs out, the card area shows
-  // core.PICKS_OUT and the button hides: focus on the button, in the old card or on the body
-  // moves to that line without scrolling, and reading it is the one line (no live
-  // announcement on top); focus anywhere else stays put and the live region says the line.
+  // The card region (card area plus this button's row) never gets shorter during swaps: a
+  // shorter page would make the browser pull the scroll position up when it sits near the
+  // bottom, which is where Get project usually leaves a phone. The next full render lets go.
+  // Focus stays where it is. Only focus that was in the old card (Safari leaves a click's
+  // focus where it was) moves, to this button, instead of dropping to the page. A screen
+  // reader hears one line: "New pick: <title>", or once the band runs out, core.PICKS_OUT.
   function notThisOne() {
     if (!shownRec) return;
     const now = core.onePick(shownRec.rec, shownRec.band, state.skipped);
-    if (!now.pick) return;
+    if (!now.pick) return; // the band already ran out: the button is aria-disabled
     const btn = $('not-this-btn');
+    const list = $('recs-list');
+    const row = $('not-this-row');
     const active = document.activeElement;
+    const tall = list.offsetHeight + row.offsetHeight;
     state.skipped = core.skipsAfter(state.skipped, 'not-this-one', now.pick.id);
     save();
     const next = drawPick();
-    const lost = !!active && active !== document.body && !active.isConnected;
-    if (next.pick) {
-      if (lost) btn.focus({ preventScroll: true });
-      pickVoice.say(NEW_PICK + next.pick.title);
-      return;
-    }
-    const line = $('recs-list').querySelector('.pick-out');
-    if (line && (!active || lost || active === btn || active === document.body)) {
-      pickVoice.hush();
-      line.focus({ preventScroll: true });
-    } else {
-      pickVoice.say(next.message);
-    }
+    const shrunk = tall - list.offsetHeight - row.offsetHeight;
+    if (shrunk > 0) list.style.minHeight = (list.offsetHeight + shrunk) + 'px';
+    if (active && active !== document.body && !active.isConnected) btn.focus({ preventScroll: true });
+    pickVoice.say(next.pick ? NEW_PICK + next.pick.title : next.message);
   }
 
   function inputsReady() {

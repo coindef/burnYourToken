@@ -456,7 +456,7 @@ button {
 }
 .copy-fallback .hint { margin: 6px 0 0; }
 /* Not this one (#33): a small text button under the one card, and the line that takes the
-   card's place once the band runs out (focused by script only, like #recs-title). */
+   card's place once the band runs out. Then the button stays (it may hold focus), muted. */
 .not-this-row { margin: 6px 0 0; text-align: center; }
 .text-btn {
   background: none;
@@ -469,7 +469,11 @@ button {
   text-underline-offset: 3px;
 }
 .text-btn:hover { color: var(--text); }
+.text-btn[aria-disabled="true"] { color: var(--muted); text-decoration: none; cursor: default; }
 .pick-out {
+  display: flex; /* text centered in the slot the card left (see #recs-list's min-height in app.js) */
+  align-items: center;
+  min-height: inherit;
   margin: 0;
   padding: 20px;
   border: 1px dashed #b9b2a4;
@@ -477,7 +481,6 @@ button {
   background: var(--paper);
   font-size: 17px;
 }
-.pick-out:focus { outline: none; }
 
 .done-banner {
   margin: 10px 0 14px;

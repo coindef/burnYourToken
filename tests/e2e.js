@@ -2170,7 +2170,7 @@
     return { calls: calls, restore: () => Object.keys(real).forEach(k => { win[k] = real[k]; }) };
   }
 
-  test('Not this one: a small text button under the one card, only while a card shows; each click swaps in the next project of the same band (catalog order with no preferences), still one card, More projects never repeats it, nothing marked done; when the band runs out the card area says exactly so and the button hides', async () => {
+  test('Not this one: a small text button under the one card, only while a card shows; each click swaps in the next project of the same band (catalog order with no preferences), still one card, More projects never repeats it, nothing marked done; when the band runs out the card area says exactly so and the button is disabled', async () => {
     instantScroll(true);
     try {
       await fresh();
@@ -2192,6 +2192,7 @@
       ok(!btn.classList.contains('primary') && !btn.classList.contains('secondary') && !btn.classList.contains('done-btn'), 'not another CTA: ' + btn.className);
       const bs = W.getComputedStyle(btn);
       const ds = W.getComputedStyle(hero.querySelector('.done-btn'));
+      const enabledColor = bs.color;
       eq(bs.backgroundColor, 'rgba(0, 0, 0, 0)', 'a text button: no fill');
       eq(parseFloat(bs.borderTopWidth) + parseFloat(bs.borderBottomWidth), 0, 'a text button: no border');
       ok(parseFloat(bs.fontSize) < parseFloat(ds.fontSize), 'small: smaller text than Mark done (' + bs.fontSize + ' vs ' + ds.fontSize + ')');
@@ -2227,16 +2228,20 @@
       eq(cards().length, 0, 'band ran out: no card');
       eq(text($('recs-list')), PICKS_OUT, 'the card area says exactly the line');
       ok(isShown(outLine()), 'the line is on screen');
-      ok(!isShown(btn), 'band ran out: Not this one hidden');
+      eq(btn.getAttribute('aria-disabled'), 'true', 'band ran out: Not this one is disabled');
+      ok(isShown(btn) && !btn.disabled, 'it stays in place (aria-disabled, not disabled), so focus on it is not dropped');
+      ok(W.getComputedStyle(btn).color !== enabledColor, 'and looks muted');
       eq(W.QP.app.state.done.length, 0, 'skipping marks nothing done');
       ok($('done-banner').hidden, 'no done banner');
       eq(D.querySelector('main').dataset.phase, 'project', 'still the project page');
       eq(moreCards().length, bandCount('small'), 'More projects still lists the band');
+      const skipsAtOut = W.QP.app.state.skipped.join();
       btn.click();
-      eq(text($('recs-list')), PICKS_OUT, 'a click on the hidden button changes nothing');
+      eq(text($('recs-list')), PICKS_OUT, 'a click on the disabled button changes nothing');
+      eq(W.QP.app.state.skipped.join(), skipsAtOut, 'not even the skip list');
 
       calc();
-      ok(cards().length === 1 && isShown(btn), 'Get project again: a card and Not this one again');
+      ok(cards().length === 1 && isShown(btn) && !btn.hasAttribute('aria-disabled'), 'Get project again: a card, and Not this one works again');
       cards()[0].querySelector('.done-btn').click();
       ok(!isShown(btn), 'after Mark done: no Not this one');
       fill('claude', { s: 100, w: 50 });
@@ -2262,7 +2267,7 @@
       ok(statusText().indexOf(line) !== -1, 'after Get project: ' + statusText());
       notBtn().click();
       ok(statusText().indexOf(line) !== -1 && statusText().indexOf('first project') === -1, 'after a swap: ' + statusText());
-      while (isShown(notBtn())) notBtn().click();
+      for (let i = 0; i < 20 && !outLine(); i++) notBtn().click();
       eq(text($('recs-list')), PICKS_OUT, 'band ran out');
       ok(statusText().indexOf('first project') === -1, 'band ran out: ' + statusText());
       setVal('q-other', ''); // a redraw with every pick skipped
@@ -2335,7 +2340,7 @@
     }
   });
 
-  test('Not this one, band ran out: focus moves from the button to the line in the card area without scrolling, and that line is all that is read; with focus elsewhere it stays put and the live region says the line; writing what you want brings a pick back', async () => {
+  test('Not this one, band ran out: focus stays on the button, now aria-disabled, and the page stays put even parked at the very bottom (a shorter card area would pull it up); the live region says the line once; focus elsewhere stays put too; writing what you want brings a pick back', async () => {
     instantScroll(true);
     frame.style.height = '600px';
     let spy = null;
@@ -2350,9 +2355,12 @@
       toLast();
       eq(cards()[0].dataset.id, order[order.length - 1], 'the last pick of the band');
       await wait(150);
-      W.scrollTo(0, 150);
+      W.scrollTo(0, D.documentElement.scrollHeight);
       await wait(50);
       const y = W.scrollY;
+      ok(y > 0 && Math.abs(y - (D.documentElement.scrollHeight - W.innerHeight)) <= 1, 'parked at the bottom (' + y + ')');
+      const region = () => $('recs-list').offsetHeight + $('not-this-row').offsetHeight;
+      const before = region();
       focusInApp(btn);
       spy = spyScrollFocus();
       live = watchLive();
@@ -2360,20 +2368,23 @@
       const line = outLine();
       ok(line && isShown(line), 'the line is in the card area');
       eq(text(line), PICKS_OUT, 'exact line');
-      eq(line.getAttribute('tabindex'), '-1', 'focusable by script only, not a Tab stop');
-      eq(D.activeElement, line, 'focus moved from the hidden button to the line');
-      ok(spy.log.some(e => e.kind === 'focus' && e.node === line && e.preventScroll), 'focused with preventScroll');
+      ok(!line.hasAttribute('tabindex'), 'the line is text, not a focus target');
+      eq(D.activeElement, btn, 'focus stays on Not this one');
+      eq(btn.getAttribute('aria-disabled'), 'true', 'which is now aria-disabled');
+      ok(region() >= before - 0.5, 'the card region did not get shorter (' + before + ' → ' + region() + ')');
       await wait(150);
-      eq(spy.log.filter(e => e.kind === 'scroll').length, 0, 'no scrollIntoView');
-      eq(W.scrollY, y, 'no scroll');
-      eq(live.lines().length, 0, 'no live announcement on top of the focused line: ' + live.lines().join(' | '));
-      eq(text($('pick-live')), '', 'the last New pick line is cleared');
+      eq(W.scrollY, y, 'no scroll, even at the bottom of the page');
+      eq(spy.log.length, 0, 'no scrollIntoView or focus calls: ' + spy.log.map(e => e.kind + ' ' + nodeName(e.node)).join(', '));
+      eq(live.lines().join(' | '), PICKS_OUT, 'one line heard: the out line');
+      eq(text($('pick-live')), PICKS_OUT, 'the live region holds it');
       live.stop();
       spy.restore();
       spy = null;
 
       calc();
       eq(cards()[0].dataset.id, order[0], 'Get project again starts the band over');
+      ok(!btn.hasAttribute('aria-disabled'), 'and Not this one works again');
+      eq($('recs-list').style.minHeight, '', 'a full redraw lets the card area take its own height');
       toLast();
       await wait(150);
       focusInApp($('calc-btn')); // Safari leaves a click's focus where it was
@@ -2382,14 +2393,14 @@
       eq(text(outLine()), PICKS_OUT, 'the line again');
       eq(D.activeElement, $('calc-btn'), 'focus that was elsewhere stays there');
       await wait(150);
-      eq(live.lines().join(' | '), PICKS_OUT, 'the live region says the line once instead');
+      eq(live.lines().join(' | '), PICKS_OUT, 'the live region says the line once');
       live.stop();
 
       setVal('q-wish', 'organize the closet');
       eq(cards().length, 1, 'writing what you want adds a pick');
       eq(cards()[0].dataset.id, 'custom:organize the closet', 'the card built from what you wrote');
       eq(cards()[0].dataset.band, 'small', 'in the same band');
-      ok(isShown(btn) && !outLine(), 'Not this one is back and the line is gone');
+      ok(isShown(btn) && !btn.hasAttribute('aria-disabled') && !outLine(), 'Not this one works again and the line is gone');
     } finally {
       if (live) live.stop();
       if (spy) spy.restore();
