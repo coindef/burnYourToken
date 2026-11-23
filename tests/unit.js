@@ -838,5 +838,153 @@
     eq(C.projectClipboardText({ title: 'T', steps: ['a'] }), 'T\n\nSteps:\n1. a', 'no output or done: those lines are left out');
   });
 
+  // ---------------- Not this one (#33): one pick at a time from the band ----------------
+
+  // The issue's line, written out here so these checks do not reuse core's own string.
+  const PICKS_OUT = "That's every pick that fits this quota. Change your answers or come back after the reset.";
+  const idsOf = list => list.map(p => p.id).join();
+  const bandIds = band => QP.PROJECTS.filter(p => p.band === band).map(p => p.id);
+
+  // Clicks Not this one until the band runs out. Returns every pick shown, in order, every
+  // view along the way, and the skip list at the end.
+  function walkPicks(rec, band) {
+    let skipped = [];
+    let view = C.onePick(rec, band, skipped);
+    const views = [view];
+    const shown = [];
+    while (view.pick && shown.length < 100) {
+      shown.push(view.pick);
+      skipped = C.skipsAfter(skipped, 'not-this-one', view.pick.id);
+      view = C.onePick(rec, band, skipped);
+      views.push(view);
+    }
+    return { shown: shown, views: views, last: view, skipped: skipped };
+  }
+
+  test('Not this one: the first pick is recommend()’s first card; each skip shows the next project of the same band, in recommend()’s order (catalog order with no preferences), until the band runs out', () => {
+    eq(typeof C.onePick, 'function', 'core.onePick is exported');
+    eq(typeof C.skipsAfter, 'function', 'core.skipsAfter is exported');
+    ['small', 'medium', 'large'].forEach(band => {
+      const rec = C.recommend({ band: band });
+      const first = C.onePick(rec, band, []);
+      eq(first.pick, rec.cards[0], band + ': nothing skipped → recommend()’s first card, the same object');
+      eq(first.out, false, band + ': not out');
+      eq(first.message, '', band + ': no message');
+      const second = C.onePick(rec, band, [rec.cards[0].id]);
+      eq(second.pick, rec.cards[1], band + ': one skip → the next card');
+      const walk = walkPicks(rec, band);
+      eq(idsOf(walk.shown), bandIds(band).join(), band + ': every project of the band once, catalog order');
+      eq(walk.last.pick, null, band + ': no pick at the end');
+      eq(walk.last.out, true, band + ': the band ran out');
+    });
+  });
+
+  test('Not this one with preferences: picks follow recommend()’s ranking (matched cards by score, the card built from what you wrote among them, then the rest of the band); the ranking itself does not change', () => {
+    const opts = { band: 'medium', domains: ['travel'], outputs: ['plan'], audiences: ['family'], wish: 'organize the closet' };
+    const rec = C.recommend(opts);
+    ok(rec.personalized && rec.cards.length > 1 && rec.others.length > 0, 'personalized, with matched cards and unmatched others');
+    const walk = walkPicks(rec, 'medium');
+    eq(idsOf(walk.shown), idsOf(rec.cards.concat(rec.others)), 'cards first, in order, then others, in order');
+    ok(walk.shown.some(p => p.custom && p.band === 'medium'), 'the card built from what you wrote is one of the picks');
+    eq(walk.shown.length, bandIds('medium').length + 1, 'the whole band plus the custom card');
+    eq(walk.shown[walk.shown.indexOf(walk.shown.find(p => p.id === 'travel-day-trip')) + 1].id, 'hobby-party', 'skipping the best match shows the next best');
+    eq(idsOf(C.recommend(opts).cards.concat(C.recommend(opts).others)), idsOf(rec.cards.concat(rec.others)), 'recommend() ranks the same as before');
+  });
+
+  test('Not this one never leaves the band: 3 bands × 128 area choices × 2 wishes × 2 done lists, every pick is in the band, each once, never in More projects too, and the band runs out with the exact line', () => {
+    const dIds = QP.DOMAINS.map(d => d.id);
+    let walks = 0;
+    let bad = '';
+    const fail = msg => { if (!bad) bad = msg; };
+    ['small', 'medium', 'large'].forEach(band => {
+      for (let mask = 0; mask < 1 << dIds.length; mask++) {
+        const domains = dIds.filter((_, i) => mask & (1 << i));
+        ['', '想去日本旅游'].forEach(wish => {
+          [[], ['travel-trip', 'life-meals', 'work-checklist', 'create-posts']].forEach(done => {
+            const opts = { band: band, domains: domains, wish: wish, done: done };
+            const where = () => ' @ ' + JSON.stringify(opts);
+            const rec = C.recommend(opts);
+            const walk = walkPicks(rec, band);
+            walks++;
+            const want = bandIds(band).filter(id => done.indexOf(id) === -1).concat(wish ? ['custom:' + wish] : []);
+            if (walk.shown.map(p => p.id).sort().join() !== want.sort().join()) fail('picks are not exactly the band' + where());
+            walk.shown.forEach(p => { if (p.band !== band) fail('left the band: ' + p.id + where()); });
+            const total = rec.cards.length + rec.others.length + rec.smaller.length;
+            walk.views.forEach(v => {
+              if (v.pick && v.more.indexOf(v.pick) !== -1) fail('the pick is in More projects too: ' + v.pick.id + where());
+              if (v.more.length !== total - (v.pick ? 1 : 0)) fail('More projects dropped a project' + where());
+            });
+            if (!walk.last.out || walk.last.message !== PICKS_OUT) fail('the band did not run out with the line' + where());
+          });
+        });
+      }
+    });
+    eq(bad, '', 'first problem');
+    eq(walks, 3 * 128 * 2 * 2, 'walks');
+  });
+
+  test('Not this one never picks bigger (or smaller) than the band, even from lists that hold other bands', () => {
+    const P = id => QP.PROJECTS.find(p => p.id === id);
+    const rec = { cards: [P('travel-trip'), P('travel-day-trip')], others: [P('life-meals'), P('life-compare')], smaller: [P('life-meals')] };
+    const walk = walkPicks(rec, 'medium');
+    eq(idsOf(walk.shown), 'travel-day-trip,life-compare', 'Medium picks only, in order: the Large and the Small one are passed over');
+    eq(walk.last.out, true, 'then the band runs out');
+    ok(walk.views.every(v => v.more.every(p => p.id !== 'travel-trip')), 'the Large project is not offered in More projects either');
+    eq(C.onePick(C.recommend({ band: 'small' }), 'small', []).pick.band, 'small', 'Small quota: a Small pick');
+  });
+
+  test('Not this one, band ran out: the exact line, only once every pick is skipped; More projects still lists them; an empty band (all done) or no quota says nothing new', () => {
+    eq(C.PICKS_OUT, PICKS_OUT, 'core.PICKS_OUT is the issue’s line');
+    const rec = C.recommend({ band: 'small' });
+    const all = bandIds('small');
+    const out = C.onePick(rec, 'small', all);
+    eq(out.pick, null, 'no pick');
+    eq(out.out, true, 'out');
+    eq(out.message, PICKS_OUT, 'the line');
+    eq(idsOf(out.more), idsOf(rec.cards.concat(rec.others, rec.smaller)), 'More projects still lists every project, same order');
+    const last = C.onePick(rec, 'small', all.slice(0, -1));
+    eq(last.pick.id, all[all.length - 1], 'one left: that one is the pick');
+    eq(last.out, false, 'not out yet');
+    eq(last.message, '', 'no line yet');
+    // Every project done and nothing written: the band is empty, not run out. The page already
+    // says "You’ve finished every ready-made project in this band".
+    const empty = C.onePick(C.recommend({ band: 'small', done: all }), 'small', []);
+    eq(empty.pick, null, 'all done: no pick');
+    eq(empty.out, false, 'all done is not "ran out"');
+    eq(empty.message, '', 'all done: no line');
+    const none = C.onePick(C.recommend({ band: 'none' }), 'none', ['x']);
+    ok(none.pick === null && !none.out && none.message === '' && none.more.length === 0, 'nothing left: no pick, no line');
+    const junk = C.onePick(null, 'small', 'nope');
+    ok(junk.pick === null && !junk.out && junk.more.length === 0, 'no result: nothing to show');
+    eq(C.onePick(rec, 'small', ['travel-trip', 'custom:x', 42, null]).pick, rec.cards[0], 'ids that are not picks change nothing');
+  });
+
+  test('Not this one skip list: a skip adds the pick once; Get project and Fill again start the band over; a plain Fill, a quiz edit, Copy or Mark done keep it', () => {
+    const rec = C.recommend({ band: 'medium' });
+    const order = rec.cards.map(p => p.id);
+    let skipped = C.skipsAfter([], 'not-this-one', order[0]);
+    eq(skipped.join(), order[0], 'first skip');
+    skipped = C.skipsAfter(skipped, 'not-this-one', order[1]);
+    eq(skipped.join(), order.slice(0, 2).join(), 'second skip');
+    eq(C.skipsAfter(skipped, 'not-this-one', order[1]).join(), skipped.join(), 'the same id is not added twice');
+    eq(C.onePick(rec, 'medium', skipped).pick.id, order[2], 'two skips → the third project');
+    ['get-project', 'fill-again'].forEach(action => {
+      const after = C.skipsAfter(skipped, action);
+      eq(after.length, 0, action + ' empties the list');
+      eq(C.onePick(rec, 'medium', after).pick.id, order[0], action + ': the first pick is back');
+    });
+    ['fill', 'quiz', 'copy', 'mark-done', undefined].forEach(action => {
+      eq(C.skipsAfter(skipped, action).join(), skipped.join(), String(action) + ' keeps the list');
+    });
+    const before = skipped.join();
+    C.skipsAfter(skipped, 'not-this-one', order[5]);
+    C.skipsAfter(skipped, 'get-project');
+    eq(skipped.join(), before, 'a new list each time; the one passed in is not changed');
+    ok(C.skipsAfter(skipped, 'quiz') !== skipped, 'a copy even when nothing changes');
+    eq(C.skipsAfter(['a', 7, null, 'b'], 'quiz').join(), 'a,b', 'ids that are not strings are dropped');
+    eq(C.skipsAfter('junk', 'not-this-one', 'a').join(), 'a', 'not a list: starts from empty');
+    eq(C.skipsAfter([], 'not-this-one', '').length, 0, 'no id: nothing added');
+  });
+
   window.addEventListener('load', () => runTests());
 })();

@@ -36,7 +36,8 @@
     lastDone: '',
     filled: false, // a Fill succeeded since the last Mark done / Clear
     usageReady: false, // true after Fill succeeds, Try sample, or restored numbers
-    manual: false // Fill found no extension: show the fields so people can type by hand
+    manual: false, // Fill found no extension: show the fields so people can type by hand
+    skipped: [] // Not this one (#33): project ids passed over; Get project and Fill again empty it
   };
 
   const $ = id => document.getElementById(id);
@@ -225,6 +226,7 @@
     state.computedAt = now;
     state.edited = false;
     state.stale = false;
+    state.skipped = core.skipsAfter(state.skipped, 'get-project');
     $('restore-note').hidden = true;
     save();
     renderResults();
@@ -355,6 +357,30 @@
     return why.band || '';
   }
 
+  // A polite live region's voice, for a line a screen reader should hear once. say() empties
+  // the region and puts the words in SAY_MS later, so the same words twice are read twice;
+  // hush() empties it and drops a say that is still waiting. A region that has left the page
+  // (its card was re-drawn) is left alone.
+  const SAY_MS = 100;
+  function voiceOf(live) {
+    let timer = 0;
+    return {
+      say(text) {
+        clearTimeout(timer);
+        live.textContent = '';
+        timer = setTimeout(() => {
+          timer = 0;
+          if (live.isConnected) live.textContent = text;
+        }, SAY_MS);
+      },
+      hush() {
+        clearTimeout(timer);
+        timer = 0;
+        live.textContent = '';
+      }
+    };
+  }
+
   // Copy for Claude: copies core.projectClipboardText(p); the label says Copied for 2s and the
   // live region says it once per click. No clipboard, a refused write, or a writeText still
   // pending after ~1s: a read-only textarea under the buttons holds the text, all selected,
@@ -367,7 +393,6 @@
   const COPY_SAID = 'Copied. Paste it into Claude.'; // the live region: the full sentence
   const COPY_HINT = 'Press ⌘C / Ctrl+C';
   const COPY_RESET_MS = 2000;
-  const COPY_SAY_MS = 100; // the live region is emptied first, so repeated words are read again
   const COPY_WRITE_MS = 1000; // a writeText that never settles opens the fallback, same as a refusal
   let copyHintIds = 0;
 
@@ -376,22 +401,13 @@
     const fallback = el('div', { class: 'copy-fallback' });
     fallback.hidden = true;
     const live = el('p', { class: 'visually-hidden', 'aria-live': 'polite', 'aria-atomic': 'true' });
+    const voice = voiceOf(live);
     let area = null; // made on the first failed copy, then reused
     let clicks = 0;
     let resetTimer = 0;
-    let sayTimer = 0;
 
     function setLabel(text) {
       if (button.textContent !== text) button.textContent = text;
-    }
-
-    function say(text) {
-      clearTimeout(sayTimer);
-      live.textContent = '';
-      sayTimer = setTimeout(() => {
-        sayTimer = 0;
-        if (live.isConnected) live.textContent = text;
-      }, COPY_SAY_MS);
     }
 
     function copied() {
@@ -404,11 +420,9 @@
         resetTimer = 0;
         if (!button.isConnected) return;
         setLabel(COPY_LABEL);
-        clearTimeout(sayTimer);
-        sayTimer = 0;
-        live.textContent = '';
+        voice.hush();
       }, COPY_RESET_MS);
-      say(COPY_SAID);
+      voice.say(COPY_SAID);
     }
 
     function showFallback(text) {
@@ -514,13 +528,11 @@
   }
 
   function renderRecsBody() {
-    const list = $('recs-list');
-    const moreBox = $('recs-more');
-    const moreList = $('more-list');
     $('recs-status').textContent = '';
-    list.textContent = '';
-    moreList.textContent = '';
-    moreBox.hidden = true;
+    shownRec = null;
+    $('recs-list').style.minHeight = ''; // a full redraw lets the card area take its own height
+    drawPick();
+    pickVoice.hush(); // a New pick line from an earlier swap no longer describes the card
     $('done-banner').hidden = !state.stale;
     renderChips(null, null);
 
@@ -567,7 +579,8 @@
     if (state.edited) status("You changed the numbers and haven't clicked Get project. The project below still uses the last result.", 'warn');
 
     if (!rec.personalized) {
-      status('No preferences yet (or you skipped). This is the first project in the band.');
+      // True for every pick: Not this one swaps the card without redrawing these lines.
+      status('No preferences yet. Picks go in list order.');
     } else {
       const label = (list, id) => (list.find(x => x.id === id) || { label: id }).label;
       const picked = quiz.domains.map(core.domainLabel).concat(quiz.other.trim() ? [quiz.other.trim()] : []);
@@ -590,16 +603,78 @@
     } else if (rec.fallback) {
       status('Nothing in this band matches what you picked, so here is the whole band.', 'warn');
     }
-    // 主列表只放这一档排第一的一张。其余同档和更小的档收进 More projects。
+    shownRec = { rec: rec, band: r.band };
+    drawPick();
+  }
+
+  // ---------------- Not this one (#33) ----------------
+
+  // What the card area is drawn from: recommend()'s result and the band it was made for, or
+  // null while the recommendations show no card (no result, stale, nothing left, bad numbers).
+  let shownRec = null;
+  let pickVoice = null; // voiceOf(#pick-live), set in init()
+  const NEW_PICK = 'New pick: ';
+
+  // The card area: the one pick (core.onePick: the band's first project not skipped) with Not
+  // this one under it, or once the band has run out, its line in the card's place. More
+  // projects lists every other project. Returns onePick's view, or null with no shownRec.
+  // Out of picks, the button stays put but does nothing: aria-disabled rather than disabled,
+  // because a disabled button drops the focus it holds to the page.
+  function drawPick() {
+    const list = $('recs-list');
+    const moreBox = $('recs-more');
+    const moreList = $('more-list');
+    const row = $('not-this-row');
+    const btn = $('not-this-btn');
+    list.textContent = '';
+    moreList.textContent = '';
+    moreBox.hidden = true;
+    row.hidden = true;
+    btn.removeAttribute('aria-disabled');
+    if (!shownRec) return null;
+    const one = core.onePick(shownRec.rec, shownRec.band, state.skipped);
     const view = core.onboardingView('project');
-    const primary = rec.cards[0] || null;
-    const extra = rec.cards.slice(primary ? 1 : 0).concat(rec.others, rec.smaller);
-    if (primary && view.heroCount === 1) list.appendChild(card(primary, true));
-    while (list.children.length > 1) list.removeChild(list.lastChild);
-    if (extra.length) {
-      moreBox.hidden = false;
-      extra.forEach(p => moreList.appendChild(card(p)));
+    if (one.pick && view.heroCount === 1) {
+      list.appendChild(card(one.pick, true));
+      row.hidden = false;
+    } else if (one.out) {
+      list.appendChild(el('p', { class: 'pick-out', text: one.message }));
+      row.hidden = false;
+      btn.setAttribute('aria-disabled', 'true');
     }
+    while (list.children.length > 1) list.removeChild(list.lastChild);
+    if (one.more.length) {
+      moreBox.hidden = false;
+      one.more.forEach(p => moreList.appendChild(card(p)));
+    }
+    return one;
+  }
+
+  // Not this one: swaps the hero for the next project of the same band. Only the card area,
+  // More projects and the skip list change (saved like the preferences): nothing is marked
+  // done, nothing scrolls, and #recs-status is left alone so its lines are not read again.
+  // The card region (card area plus this button's row) never gets shorter during swaps: a
+  // shorter page would make the browser pull the scroll position up when it sits near the
+  // bottom, which is where Get project usually leaves a phone. The next full render lets go.
+  // Focus stays where it is. Only focus that was in the old card (Safari leaves a click's
+  // focus where it was) moves, to this button, instead of dropping to the page. A screen
+  // reader hears one line: "New pick: <title>", or once the band runs out, core.PICKS_OUT.
+  function notThisOne() {
+    if (!shownRec) return;
+    const now = core.onePick(shownRec.rec, shownRec.band, state.skipped);
+    if (!now.pick) return; // the band already ran out: the button is aria-disabled
+    const btn = $('not-this-btn');
+    const list = $('recs-list');
+    const row = $('not-this-row');
+    const active = document.activeElement;
+    const tall = list.offsetHeight + row.offsetHeight;
+    state.skipped = core.skipsAfter(state.skipped, 'not-this-one', now.pick.id);
+    save();
+    const next = drawPick();
+    const shrunk = tall - list.offsetHeight - row.offsetHeight;
+    if (shrunk > 0) list.style.minHeight = (list.offsetHeight + shrunk) + 'px';
+    if (active && active !== document.body && !active.isConnected) btn.focus({ preventScroll: true });
+    pickVoice.say(next.pick ? NEW_PICK + next.pick.title : next.message);
   }
 
   function inputsReady() {
@@ -667,8 +742,9 @@
   }
 
   // Fill again: back to step 1 and run Fill directly. Get project stays a separate click.
-  // Starts fresh: drops the done banner, old result and old numbers (plan and used/left stay),
-  // so only Fill's own status shows. The finished list stays for "Finished N this round".
+  // Starts fresh: drops the done banner, old result, old numbers (plan and used/left stay) and
+  // the Not this one skips, so only Fill's own status shows. The finished list stays for
+  // "Finished N this round".
   function goRecalc() {
     state.stale = false;
     state.computedAt = null;
@@ -676,6 +752,7 @@
     state.edited = false;
     state.usageReady = false;
     state.filled = false;
+    state.skipped = core.skipsAfter(state.skipped, 'fill-again');
     ['-s-pct', '-s-h', '-s-m', '-s-clock', '-w-pct', '-w-day', '-w-clock'].forEach(suffix => {
       const n = $('claude' + suffix);
       if (n) n.value = '';
@@ -694,7 +771,8 @@
   function save() {
     const data = {
       v: 1, inputs: {}, quiz: readQuiz(),
-      done: state.done, doneTitles: state.doneTitles, lastDone: state.lastDone, stale: state.stale
+      done: state.done, doneTitles: state.doneTitles, lastDone: state.lastDone, stale: state.stale,
+      skipped: state.skipped
     };
     shownServices().forEach(s => { data.inputs[s.id] = readService(s.id); });
     try { sessionStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { /* 存不了也不影响使用 */ }
@@ -708,6 +786,7 @@
     writeQuiz(data.quiz || {});
     state.done = Array.isArray(data.done) ? data.done.filter(x => typeof x === 'string') : [];
     state.doneTitles = Array.isArray(data.doneTitles) ? data.doneTitles.filter(x => typeof x === 'string') : [];
+    state.skipped = Array.isArray(data.skipped) ? data.skipped.filter(x => typeof x === 'string') : [];
     state.lastDone = typeof data.lastDone === 'string' ? data.lastDone : '';
     state.stale = !!data.stale && !!state.lastDone;
     state.usageReady = inputsReady();
@@ -906,7 +985,7 @@
     try { sessionStorage.removeItem(STORE_KEY); } catch (e) { /* 没存过 */ }
     $('calc-form').reset();
     $('quiz-form').reset();
-    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false, filled: false, manual: false });
+    Object.assign(state, { results: {}, computedAt: null, edited: false, stale: false, done: [], doneTitles: [], lastDone: '', usageReady: false, filled: false, manual: false, skipped: [] });
     shownServices().forEach(s => { togglePlan(s.id); syncModeLabels(s.id); });
     clearInvalid();
     $('restore-note').hidden = true;
@@ -965,6 +1044,8 @@
     $('example-btn').addEventListener('click', fillExample);
     $('skip-btn').addEventListener('click', skipQuiz);
     $('recalc-btn').addEventListener('click', goRecalc);
+    pickVoice = voiceOf($('pick-live'));
+    $('not-this-btn').addEventListener('click', notThisOne);
 
     restore();
     // index.html marks both Fill buttons primary; pick one so a reload in the done state keeps one primary.

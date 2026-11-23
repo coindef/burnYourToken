@@ -1132,7 +1132,7 @@
       });
       eq(cards().concat(moreCards()).filter(n => n.dataset.band === c[1]).length, bandCount(c[1]), c[1] + '：其余同档在 More projects');
       ok(!$('recs-more').hidden, 'More projects 收着其余的');
-      ok(statusText().indexOf('skipped') !== -1, '状态里说了是跳过的');
+      ok(statusText().indexOf('No preferences yet. Picks go in list order.') !== -1, '状态里说了还没有偏好');
       eq($('skip-btn').textContent.trim(), 'Skip to recommendations');
     });
   });
@@ -2111,6 +2111,521 @@
     } finally {
       if (label) label.stop();
       if (said) said.stop();
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  // ---------------- Not this one (#33) ----------------
+
+  const NOT_THIS = 'Not this one';
+  const PICKS_OUT = "That's every pick that fits this quota. Change your answers or come back after the reset.";
+  const NEW_PICK = 'New pick: ';
+  const notBtn = () => $('not-this-btn');
+  const outLine = () => D.querySelector('#recs-list .pick-out');
+  const idsIn = band => W.QP.PROJECTS.filter(p => p.band === band).map(p => p.id);
+  const titleOf = c => text(c.querySelector('h3'));
+
+  // What a screen reader would get from the app's live regions (aria-live, or role status /
+  // alert / log) while this watches: after each batch of DOM changes, the text of every region
+  // that changed, if it has any. Emptying a region is not a line; filling it again is.
+  function watchLive() {
+    const heard = [];
+    function regionOf(node) {
+      for (let n = node && node.nodeType === 1 ? node : node && node.parentElement; n; n = n.parentElement) {
+        const live = n.getAttribute('aria-live');
+        if (live && live !== 'off') return n;
+        if (/^(status|alert|log)$/.test(n.getAttribute('role') || '')) return n;
+      }
+      return null;
+    }
+    const mo = new W.MutationObserver(list => {
+      const touched = [];
+      list.forEach(m => {
+        const r = regionOf(m.target);
+        if (r && touched.indexOf(r) === -1) touched.push(r);
+      });
+      touched.forEach(r => {
+        const t = r.textContent.trim();
+        if (t) heard.push(t);
+      });
+    });
+    mo.observe(D.body, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+    return { lines: () => heard.slice(), stop: () => mo.disconnect() };
+  }
+
+  // Logs window.scrollTo / scrollBy / scroll calls in the app iframe (spyScrollFocus covers
+  // scrollIntoView and focus). Returns { calls, restore }.
+  function spyWindowScroll() {
+    const calls = [];
+    const real = {};
+    ['scrollTo', 'scrollBy', 'scroll'].forEach(k => {
+      real[k] = W[k];
+      W[k] = function () {
+        calls.push(k);
+        return real[k].apply(W, arguments);
+      };
+    });
+    const win = W;
+    return { calls: calls, restore: () => Object.keys(real).forEach(k => { win[k] = real[k]; }) };
+  }
+
+  test('Not this one: a small text button under the one card, only while a card shows; each click swaps in the next project of the same band (catalog order with no preferences), still one card, More projects never repeats it, nothing marked done; when the band runs out the card area says exactly so and the button is disabled', async () => {
+    instantScroll(true);
+    try {
+      await fresh();
+      const btn = notBtn();
+      ok(btn, 'Not this one is on the page');
+      ok(!isShown(btn), 'first visit: no Not this one');
+      $('example-btn').click();
+      ok(!isShown(btn), 'numbers in, before Get project: no Not this one');
+      fill('claude', { s: 85, w: 30 }); // 15% left: Small
+      calc();
+      eq(resultOf('claude').dataset.band, 'small', 'Small band');
+      const order = idsIn('small');
+      const hero = cards()[0];
+      eq(hero.dataset.id, order[0], 'the first pick is the first Small project');
+      ok(isShown(btn), 'Not this one shows with the card');
+      eq(btn.textContent, NOT_THIS, 'label');
+      eq(btn.tagName + ' type=' + btn.getAttribute('type'), 'BUTTON type=button', 'native button');
+      ok(!$('recs-list').contains(btn), 'outside the card area, so the card area holds only the card');
+      ok(!btn.classList.contains('primary') && !btn.classList.contains('secondary') && !btn.classList.contains('done-btn'), 'not another CTA: ' + btn.className);
+      const bs = W.getComputedStyle(btn);
+      const ds = W.getComputedStyle(hero.querySelector('.done-btn'));
+      const enabledColor = bs.color;
+      eq(bs.backgroundColor, 'rgba(0, 0, 0, 0)', 'a text button: no fill');
+      eq(parseFloat(bs.borderTopWidth) + parseFloat(bs.borderBottomWidth), 0, 'a text button: no border');
+      ok(parseFloat(bs.fontSize) < parseFloat(ds.fontSize), 'small: smaller text than Mark done (' + bs.fontSize + ' vs ' + ds.fontSize + ')');
+      for (const width of [320, 375, 1280]) {
+        frame.style.width = width + 'px';
+        await wait(80);
+        const c = cards()[0].getBoundingClientRect();
+        const b = btn.getBoundingClientRect();
+        ok(b.top >= c.bottom - 0.5, width + 'px: under the card');
+        ok(b.left >= c.left - 0.5 && b.right <= c.right + 0.5, width + 'px: within the card\'s width');
+        const label = D.createRange();
+        label.selectNodeContents(btn);
+        eq(label.getClientRects().length, 1, width + 'px: label on one line');
+        ok(b.height >= 43.5, width + 'px: still a 44px touch target (' + b.height + ')');
+        ok(D.documentElement.scrollWidth <= W.innerWidth + 1, width + 'px: no horizontal scroll');
+      }
+      frame.style.width = '';
+      await wait(80);
+
+      for (let i = 1; i < order.length; i++) {
+        btn.click();
+        eq(cards().length, 1, 'skip ' + i + ': one card');
+        eq(Array.from(D.querySelectorAll('.card')).filter(isShown).length, 1, 'skip ' + i + ': no second card on screen');
+        const now = cards()[0];
+        eq(now.dataset.id, order[i], 'skip ' + i + ': the next project of the band');
+        eq(now.dataset.band, 'small', 'skip ' + i + ': same band');
+        ok(now.classList.contains('hero'), 'skip ' + i + ': it is the hero');
+        ok(isShown(btn), 'skip ' + i + ': Not this one still there');
+        ok(!moreCards().some(c => c.dataset.id === now.dataset.id), 'skip ' + i + ': More projects does not repeat the pick');
+        eq(cards().length + moreCards().length, bandCount('small'), 'skip ' + i + ': More projects lists every other project');
+      }
+      btn.click();
+      eq(cards().length, 0, 'band ran out: no card');
+      eq(text($('recs-list')), PICKS_OUT, 'the card area says exactly the line');
+      ok(isShown(outLine()), 'the line is on screen');
+      eq(btn.getAttribute('aria-disabled'), 'true', 'band ran out: Not this one is disabled');
+      ok(isShown(btn) && !btn.disabled, 'it stays in place (aria-disabled, not disabled), so focus on it is not dropped');
+      ok(W.getComputedStyle(btn).color !== enabledColor, 'and looks muted');
+      eq(W.QP.app.state.done.length, 0, 'skipping marks nothing done');
+      ok($('done-banner').hidden, 'no done banner');
+      eq(D.querySelector('main').dataset.phase, 'project', 'still the project page');
+      eq(moreCards().length, bandCount('small'), 'More projects still lists the band');
+      const skipsAtOut = W.QP.app.state.skipped.join();
+      btn.click();
+      eq(text($('recs-list')), PICKS_OUT, 'a click on the disabled button changes nothing');
+      eq(W.QP.app.state.skipped.join(), skipsAtOut, 'not even the skip list');
+
+      calc();
+      ok(cards().length === 1 && isShown(btn) && !btn.hasAttribute('aria-disabled'), 'Get project again: a card, and Not this one works again');
+      cards()[0].querySelector('.done-btn').click();
+      ok(!isShown(btn), 'after Mark done: no Not this one');
+      fill('claude', { s: 100, w: 50 });
+      calc();
+      eq(resultOf('claude').dataset.band, 'none', 'nothing left');
+      ok(!isShown(btn), 'nothing left: no Not this one');
+      fill('claude', { s: 150, w: 30 });
+      calc();
+      ok(!isShown(btn) && cards().length === 0, 'wrong numbers: no card, no Not this one');
+    } finally {
+      frame.style.width = '';
+      instantScroll(false);
+    }
+  });
+
+  test('Not this one: with no preferences the status line says picks go in list order, which stays true after a swap, once the band runs out, and on a redraw (it never claims the first project)', async () => {
+    instantScroll(true);
+    try {
+      await fresh();
+      fill('claude', { s: 85, w: 30 }); // Small
+      calc();
+      const line = 'No preferences yet. Picks go in list order.';
+      ok(statusText().indexOf(line) !== -1, 'after Get project: ' + statusText());
+      notBtn().click();
+      ok(statusText().indexOf(line) !== -1 && statusText().indexOf('first project') === -1, 'after a swap: ' + statusText());
+      for (let i = 0; i < 20 && !outLine(); i++) notBtn().click();
+      eq(text($('recs-list')), PICKS_OUT, 'band ran out');
+      ok(statusText().indexOf('first project') === -1, 'band ran out: ' + statusText());
+      setVal('q-other', ''); // a redraw with every pick skipped
+      ok(statusText().indexOf(line) !== -1 && statusText().indexOf('first project') === -1, 'redrawn: ' + statusText());
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('Not this one does not scroll (reduced motion on or off) and keeps focus on the button; screen readers hear one line, "New pick: <title>", and the status lines under the card stay as they are', async () => {
+    for (const reduce of [false, true]) {
+      const tag = (reduce ? 'reduce' : 'no-preference') + ': ';
+      let undo = () => {};
+      let spy = null;
+      let win = null;
+      let live = null;
+      try {
+        await fresh();
+        frame.style.height = '600px';
+        instantScroll(true);
+        fill('claude', { s: 72, h: 3, m: 12, w: 31 }); // Medium
+        calc();
+        await wait(0);
+        W.scrollTo(0, 150);
+        await wait(50);
+        instantScroll(false);
+        undo = mockReducedMotion(() => reduce);
+        const y = W.scrollY;
+        eq(y, 150, tag + 'page parked at 150');
+        const btn = notBtn();
+        focusInApp(btn); // a real click focuses the button; .click() does not
+        const old = cards()[0];
+        const status = $('recs-status');
+        const statusNodes = Array.from(status.childNodes);
+        const statusHTML = status.innerHTML;
+        ok(statusNodes.length > 0, tag + 'status lines are showing');
+        spy = spyScrollFocus();
+        win = spyWindowScroll();
+        live = watchLive();
+
+        btn.click();
+        const now = cards()[0];
+        ok(now && now !== old && !old.isConnected, tag + 'the card was swapped');
+        eq(D.activeElement, btn, tag + 'focus stays on Not this one');
+        await wait(150);
+        eq(W.scrollY, y, tag + 'the page did not scroll');
+        eq(spy.log.filter(e => e.kind === 'scroll').length, 0, tag + 'no scrollIntoView');
+        eq(win.calls.length, 0, tag + 'no scrollTo / scrollBy / scroll: ' + win.calls.join());
+        eq(spy.log.filter(e => e.kind === 'focus').length, 0, tag + 'nothing called focus(): ' + spy.log.map(e => e.kind + ' ' + nodeName(e.node)).join(', '));
+        eq(text($('pick-live')), NEW_PICK + titleOf(now), tag + 'the live region says the new title');
+        eq(live.lines().join(' | '), NEW_PICK + titleOf(now), tag + 'one line heard');
+        eq(status.innerHTML, statusHTML, tag + 'status lines unchanged');
+        ok(statusNodes.every(n => n.parentNode === status) && status.childNodes.length === statusNodes.length, tag + 'the same status nodes, so none is read again');
+
+        btn.click();
+        const third = cards()[0];
+        eq(D.activeElement, btn, tag + 'second swap: focus still on Not this one');
+        await wait(150);
+        eq(live.lines().join(' | '), NEW_PICK + titleOf(now) + ' | ' + NEW_PICK + titleOf(third), tag + 'second swap: one more line, with its own title');
+        eq(W.scrollY, y, tag + 'second swap: still no scroll');
+        eq(spy.log.filter(e => e.kind === 'scroll').length + win.calls.length, 0, tag + 'second swap: no scroll calls');
+      } finally {
+        if (live) live.stop();
+        if (win) win.restore();
+        if (spy) spy.restore();
+        undo();
+        instantScroll(false);
+        frame.style.height = '';
+      }
+    }
+  });
+
+  test('Not this one: a full redraw before the New pick line is read drops it, so screen readers never hear a title the card no longer shows', async () => {
+    let live = null;
+    try {
+      await fresh();
+      fill('claude', { s: 72, h: 3, m: 12, w: 31 }); // Medium
+      calc();
+      await wait(0);
+      live = watchLive();
+      notBtn().click(); // queues "New pick: <title>" SAY_MS later
+      calc(); // Get project redraws the card before that line is read
+      await wait(150);
+      eq(text($('pick-live')), '', 'the live region is empty after the redraw');
+      eq(live.lines().filter(l => l.indexOf(NEW_PICK) === 0).length, 0, 'no New pick line was heard: ' + live.lines().join(' | '));
+    } finally {
+      if (live) live.stop();
+    }
+  });
+
+  test('Not this one, band ran out: focus stays on the button, now aria-disabled, and the page stays put even parked at the very bottom (a shorter card area would pull it up); the live region says the line once; focus elsewhere stays put too; writing what you want brings a pick back', async () => {
+    instantScroll(true);
+    frame.style.height = '600px';
+    let spy = null;
+    let live = null;
+    try {
+      await fresh();
+      fill('claude', { s: 85, w: 30 }); // Small
+      calc();
+      const btn = notBtn();
+      const order = idsIn('small');
+      const toLast = () => { for (let i = 1; i < order.length; i++) btn.click(); };
+      toLast();
+      eq(cards()[0].dataset.id, order[order.length - 1], 'the last pick of the band');
+      await wait(150);
+      W.scrollTo(0, D.documentElement.scrollHeight);
+      await wait(50);
+      const y = W.scrollY;
+      ok(y > 0 && Math.abs(y - (D.documentElement.scrollHeight - W.innerHeight)) <= 1, 'parked at the bottom (' + y + ')');
+      const region = () => $('recs-list').offsetHeight + $('not-this-row').offsetHeight;
+      const before = region();
+      focusInApp(btn);
+      spy = spyScrollFocus();
+      live = watchLive();
+      btn.click();
+      const line = outLine();
+      ok(line && isShown(line), 'the line is in the card area');
+      eq(text(line), PICKS_OUT, 'exact line');
+      ok(!line.hasAttribute('tabindex'), 'the line is text, not a focus target');
+      eq(D.activeElement, btn, 'focus stays on Not this one');
+      eq(btn.getAttribute('aria-disabled'), 'true', 'which is now aria-disabled');
+      ok(region() >= before - 0.5, 'the card region did not get shorter (' + before + ' → ' + region() + ')');
+      await wait(150);
+      eq(W.scrollY, y, 'no scroll, even at the bottom of the page');
+      eq(spy.log.length, 0, 'no scrollIntoView or focus calls: ' + spy.log.map(e => e.kind + ' ' + nodeName(e.node)).join(', '));
+      eq(live.lines().join(' | '), PICKS_OUT, 'one line heard: the out line');
+      eq(text($('pick-live')), PICKS_OUT, 'the live region holds it');
+      live.stop();
+      spy.restore();
+      spy = null;
+
+      calc();
+      eq(cards()[0].dataset.id, order[0], 'Get project again starts the band over');
+      ok(!btn.hasAttribute('aria-disabled'), 'and Not this one works again');
+      eq($('recs-list').style.minHeight, '', 'a full redraw lets the card area take its own height');
+      toLast();
+      await wait(150);
+      focusInApp($('calc-btn')); // Safari leaves a click's focus where it was
+      live = watchLive();
+      btn.click();
+      eq(text(outLine()), PICKS_OUT, 'the line again');
+      eq(D.activeElement, $('calc-btn'), 'focus that was elsewhere stays there');
+      await wait(150);
+      eq(live.lines().join(' | '), PICKS_OUT, 'the live region says the line once');
+      live.stop();
+
+      setVal('q-wish', 'organize the closet');
+      eq(cards().length, 1, 'writing what you want adds a pick');
+      eq(cards()[0].dataset.id, 'custom:organize the closet', 'the card built from what you wrote');
+      eq(cards()[0].dataset.band, 'small', 'in the same band');
+      ok(isShown(btn) && !btn.hasAttribute('aria-disabled') && !outLine(), 'Not this one works again and the line is gone');
+    } finally {
+      if (live) live.stop();
+      if (spy) spy.restore();
+      frame.style.height = '';
+      instantScroll(false);
+    }
+  });
+
+  test('Not this one: Copy for Claude and Mark done act on the card that is showing after the swap', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(writeOk);
+    const restore = setClipboard(clip);
+    try {
+      const first = await heroForCopy(); // Medium
+      const firstP = projectOf(first);
+      notBtn().click();
+      const now = cards()[0];
+      const p = projectOf(now);
+      ok(p && p.id !== firstP.id && p.band === firstP.band, 'swapped to another project of the band: ' + now.dataset.id);
+      copyBtnOf(now).click();
+      await wait(0);
+      eq(clip.writes.length, 1, 'one write');
+      eq(clip.writes[0], copyText(p), 'Copy writes the swapped project');
+      ok(clip.writes[0] !== copyText(firstP), 'not the first pick');
+      eq(copyBtnOf(now).textContent, COPY_DONE, 'the swapped card says Copied');
+      await wait(150);
+      eq(liveOf(now).textContent, COPY_SAID, 'its live region says Copied');
+      eq(W.QP.app.state.done.length, 0, 'copying marks nothing done');
+      now.querySelector('.done-btn').click();
+      eq(W.QP.app.state.done.join(), p.id, 'Mark done marks the swapped project, not the first pick');
+      eq(W.QP.app.state.doneTitles.join(), p.title, 'with its title');
+      ok(!$('done-banner').hidden && cards().length === 0, 'done banner; no card until Fill again');
+      ok(!isShown(notBtn()), 'no Not this one in the done state');
+      eq(D.activeElement, $('recalc-btn'), 'focus on Fill again');
+    } finally {
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Not this one: skips stay for this tab (saved with the preferences in qp-v0, nothing else stored) through quiz edits and a plain Fill; Get project again and Fill again start the band over; Clear forgets them', async () => {
+    const usage = fixtureUsage();
+    const saved = () => JSON.parse(W.sessionStorage.getItem('qp-v0'));
+    instantScroll(true);
+    try {
+      await fresh();
+      installUsageBridge(() => ({ ok: true, usage: usage }));
+      $('fill-usage-btn').click();
+      await flushFill();
+      calc();
+      eq(resultOf('claude').dataset.band, 'medium', 'the Usage fixture is Medium');
+      const order = idsIn('medium');
+      eq(cards()[0].dataset.id, order[0], 'first pick');
+      notBtn().click();
+      notBtn().click();
+      eq(cards()[0].dataset.id, order[2], 'two skips');
+      eq(saved().skipped.join(), order.slice(0, 2).join(), 'skips saved with the preferences');
+      eq(W.sessionStorage.length, 1, 'one sessionStorage entry, as before');
+      eq(W.localStorage.length, 0, 'nothing in localStorage');
+      eq(D.cookie, '', 'no cookie');
+      eq(W.location.search + W.location.hash, '', 'nothing in the address');
+
+      setVal('q-other', '');
+      eq(cards()[0].dataset.id, order[2], 'a quiz edit redraws the card area and keeps the skips');
+      pick('input[name="q-domain"][value="work"]');
+      eq(W.QP.PROJECTS.find(p => p.id === order[0]).domain + ',' + W.QP.PROJECTS.find(p => p.id === order[1]).domain, 'work,work', 'both skipped projects are Work');
+      eq(cards()[0].dataset.id, order[2], 'with Work picked, the skipped Work projects stay skipped: the next pick is the best of the rest');
+      unpick('input[name="q-domain"][value="work"]');
+
+      $('fill-usage-btn').click();
+      await flushFill();
+      eq($('fill-status').textContent, FILL_AGAIN, 'a second Fill read');
+      eq(cards()[0].dataset.id, order[2], 'a plain Fill only copies numbers: same card, skips kept');
+      eq(saved().skipped.join(), order.slice(0, 2).join(), 'skips still saved');
+
+      calc();
+      eq(cards()[0].dataset.id, order[0], 'Get project again starts the band over');
+      eq(saved().skipped.length, 0, 'saved skips emptied');
+
+      notBtn().click();
+      eq(cards()[0].dataset.id, order[1], 'skip once more');
+      cards()[0].querySelector('.done-btn').click();
+      eq(W.QP.app.state.skipped.join(), order[0], 'Mark done keeps the skip list');
+      $('recalc-btn').click();
+      eq(W.QP.app.state.skipped.length, 0, 'Fill again empties the skip list');
+      eq(saved().skipped.length, 0, 'and the saved one');
+      await flushFill();
+      calc();
+      eq(cards()[0].dataset.id, order[0], 'after Fill again: the first pick again (the done one stays hidden)');
+
+      notBtn().click();
+      removeUsageBridge();
+      await reloadApp();
+      eq(W.QP.app.state.skipped.join(), order[0], 'a reload in the same tab brings the skips back with the preferences');
+      calc();
+      eq(cards()[0].dataset.id, order[0], 'and Get project still starts the band over');
+      notBtn().click();
+      eq(saved().skipped.join(), order[0], 'skip saved');
+      $('clear-btn').click();
+      eq(W.QP.app.state.skipped.length, 0, 'Clear forgets the skips');
+      eq(W.sessionStorage.getItem('qp-v0'), null, 'nothing saved');
+    } finally {
+      removeUsageBridge();
+      instantScroll(false);
+    }
+  });
+
+  test('Not this one with focus inside the old card (Safari leaves a click\'s focus where it was, e.g. in the manual-copy box): focus moves to Not this one without scrolling, and the one line read is still New pick', async () => {
+    instantScroll(true);
+    const clip = fakeClipboard(writeDenied);
+    const restore = setClipboard(clip);
+    let spy = null;
+    let live = null;
+    let unfocus = () => {};
+    try {
+      const hero = await heroForCopy();
+      const copy = copyBtnOf(hero);
+      W.scrollTo(0, 150);
+      await wait(50);
+      const y = W.scrollY;
+      focusInApp(copy);
+      unfocus = focusOnClick(copy);
+      copy.click();
+      await wait(0);
+      unfocus();
+      unfocus = () => {};
+      const ta = shownAreas(hero)[0];
+      ok(ta, 'the manual-copy box is open in the card');
+      eq(D.activeElement, ta, 'focus is in the box');
+      spy = spyScrollFocus();
+      live = watchLive();
+      notBtn().click(); // like Safari: the click leaves focus in the box
+      const now = cards()[0];
+      ok(!hero.isConnected && now !== hero, 'the card was swapped');
+      eq(D.activeElement, notBtn(), 'focus moved to Not this one, not lost to the page');
+      ok(spy.log.some(e => e.kind === 'focus' && e.node === notBtn() && e.preventScroll), 'focus() with preventScroll');
+      await wait(150);
+      eq(spy.log.filter(e => e.kind === 'scroll').length, 0, 'no scrollIntoView');
+      eq(W.scrollY, y, 'no scroll');
+      eq(live.lines().join(' | '), NEW_PICK + titleOf(now), 'one line: New pick');
+      eq(shownAreas(now).length, 0, 'the new card starts with no box');
+    } finally {
+      unfocus();
+      if (live) live.stop();
+      if (spy) spy.restore();
+      restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Not this one while Copy for Claude is still writing: a late answer and the 1s write timer leave both cards alone and never take focus from Not this one', async () => {
+    instantScroll(true);
+    let answer = null;
+    const clip = fakeClipboard(() => new W.Promise((resolve, reject) => { answer = { resolve: resolve, reject: reject }; }));
+    const restore = setClipboard(clip);
+    const errorsBefore = appErrors.length;
+    let spy = null;
+    try {
+      await heroForCopy();
+      for (const outcome of ['resolve', 'reject']) {
+        const old = cards()[0];
+        copyBtnOf(old).click();
+        ok(answer, outcome + ': write pending');
+        focusInApp(notBtn());
+        notBtn().click();
+        const now = cards()[0];
+        ok(!old.isConnected && now !== old, outcome + ': swapped while the write is pending');
+        eq(D.activeElement, notBtn(), outcome + ': focus on Not this one');
+        spy = spyScrollFocus();
+        if (outcome === 'resolve') answer.resolve();
+        else answer.reject(new W.DOMException('Write permission denied.', 'NotAllowedError'));
+        answer = null;
+        await wait(200);
+        eq(copyBtnOf(old).textContent, COPY_LABEL, outcome + ': the old, detached button is left alone');
+        eq(old.querySelectorAll('textarea').length, 0, outcome + ': no box built in the old card');
+        eq(copyBtnOf(now).textContent, COPY_LABEL, outcome + ': the new card is untouched');
+        eq(shownAreas(now).length, 0, outcome + ': no box in the new card');
+        eq(liveOf(now).textContent, '', outcome + ': the new card\'s live region is quiet');
+        eq(spy.log.length, 0, outcome + ': no focus or scroll calls: ' + spy.log.map(e => e.kind + ' ' + nodeName(e.node)).join(', '));
+        spy.restore();
+        spy = null;
+      }
+      // A write that never settles: the 1s timer fires for a card that is gone.
+      clip.reply = () => new W.Promise(() => {});
+      let atFire = null;
+      const undo = atWriteTimeout(fn => {
+        focusInApp(notBtn());
+        fn();
+        atFire = D.activeElement;
+      });
+      try {
+        const old = cards()[0];
+        copyBtnOf(old).click();
+        focusInApp(notBtn());
+        notBtn().click();
+        const now = cards()[0];
+        ok(!old.isConnected, 'swapped while the write hangs');
+        await wait(1500);
+        eq(atFire, notBtn(), 'when the 1s timer fired, focus stayed on Not this one');
+        eq(Array.from(D.querySelectorAll('textarea')).filter(isShown).length, 0, 'no manual-copy box anywhere');
+        eq(copyBtnOf(now).textContent, COPY_LABEL, 'the new card is untouched');
+      } finally {
+        undo();
+      }
+      eq(appErrors.length, errorsBefore, 'no page errors: ' + appErrors.slice(errorsBefore).join(' / '));
+    } finally {
+      if (spy) spy.restore();
       restore();
       instantScroll(false);
     }
