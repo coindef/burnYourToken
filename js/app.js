@@ -650,12 +650,26 @@
     return one;
   }
 
+  // Width the band-ran-out lock was measured at. The lock holds the old card's height at that
+  // width; once the window is wider or narrower it no longer fits the line (a wider window
+  // leaves blank space under it), so it is dropped. A height-only resize (a phone's address bar
+  // showing or hiding while scrolling) keeps it.
+  let lockWidth = 0;
+  function releaseLock() {
+    const list = $('recs-list');
+    if (!list.style.minHeight || window.innerWidth === lockWidth) return;
+    list.style.minHeight = '';
+  }
+
   // Not this one: swaps the hero for the next project of the same band. Only the card area,
   // More projects and the skip list change (saved like the preferences): nothing is marked
   // done, nothing scrolls, and #recs-status is left alone so its lines are not read again.
-  // The card region (card area plus this button's row) never gets shorter during swaps: a
-  // shorter page would make the browser pull the scroll position up when it sits near the
-  // bottom, which is where Get project usually leaves a phone. The next full render lets go.
+  // Once the band runs out, the line that replaces the card keeps the card region (card area
+  // plus this button's row) as tall as it was: a shorter page would make the browser pull the
+  // scroll position up when it sits near the bottom, which is where Get project usually leaves
+  // a phone. A swap to another pick takes the new card's own height, so swapping away from a
+  // card with Show steps open leaves no empty space. A width change (releaseLock) or the next
+  // full render lets go.
   // Focus stays where it is. Only focus that was in the old card (Safari leaves a click's
   // focus where it was) moves, to this button, instead of dropping to the page. A screen
   // reader hears one line: "New pick: <title>", or once the band runs out, core.PICKS_OUT.
@@ -667,12 +681,21 @@
     const list = $('recs-list');
     const row = $('not-this-row');
     const active = document.activeElement;
-    const tall = list.offsetHeight + row.offsetHeight;
+    const height = node => node.getBoundingClientRect().height;
+    const tall = height(list) + height(row);
     state.skipped = core.skipsAfter(state.skipped, 'not-this-one', now.pick.id);
     save();
+    // Held through the swap itself, before the card goes: with the old card's height already
+    // locked, Chrome's scroll anchoring does not move the page when the card is removed.
+    list.style.minHeight = height(list) + 'px';
     const next = drawPick();
-    const shrunk = tall - list.offsetHeight - row.offsetHeight;
-    if (shrunk > 0) list.style.minHeight = (list.offsetHeight + shrunk) + 'px';
+    if (next.pick) {
+      list.style.minHeight = '';
+    } else {
+      const shrunk = tall - height(list) - height(row);
+      if (shrunk > 0) list.style.minHeight = (height(list) + shrunk) + 'px';
+      lockWidth = window.innerWidth;
+    }
     if (active && active !== document.body && !active.isConnected) btn.focus({ preventScroll: true });
     pickVoice.say(next.pick ? NEW_PICK + next.pick.title : next.message);
   }
@@ -1046,6 +1069,7 @@
     $('recalc-btn').addEventListener('click', goRecalc);
     pickVoice = voiceOf($('pick-live'));
     $('not-this-btn').addEventListener('click', notThisOne);
+    window.addEventListener('resize', releaseLock);
 
     restore();
     // index.html marks both Fill buttons primary; pick one so a reload in the done state keeps one primary.

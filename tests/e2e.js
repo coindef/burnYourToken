@@ -2119,7 +2119,7 @@
   // ---------------- Not this one (#33) ----------------
 
   const NOT_THIS = 'Not this one';
-  const PICKS_OUT = "That's every pick that fits this quota. Change your answers or come back after the reset.";
+  const PICKS_OUT = "That’s every pick that fits this quota. Change your answers or come back after the reset.";
   const NEW_PICK = 'New pick: ';
   const notBtn = () => $('not-this-btn');
   const outLine = () => D.querySelector('#recs-list .pick-out');
@@ -2424,6 +2424,66 @@
       if (spy) spy.restore();
       frame.style.height = '';
       instantScroll(false);
+    }
+  });
+
+  test('Not this one: a swap to another pick takes the new card\'s own height, so opening Show steps and swapping leaves no empty space under the card', async () => {
+    try {
+      await fresh();
+      frame.style.width = '375px';
+      await wait(80);
+      fill('claude', { s: 85, w: 30 }); // Small
+      calc();
+      const btn = notBtn();
+      const steps = cards()[0].querySelector('details.steps');
+      steps.open = true;
+      await wait(0);
+      const tall = $('recs-list').offsetHeight;
+      btn.click();
+      const now = cards()[0];
+      ok(!now.querySelector('details.steps').open, 'the new card starts with its steps closed');
+      eq($('recs-list').style.minHeight, '', 'no height lock on a swap to another pick');
+      ok($('recs-list').offsetHeight < tall, 'the card area got shorter (' + tall + ' → ' + $('recs-list').offsetHeight + ')');
+      const gap = $('recs-list').getBoundingClientRect().bottom - now.getBoundingClientRect().bottom;
+      ok(gap <= 1, 'no blank space under the card (' + gap + 'px)');
+    } finally {
+      frame.style.width = '';
+      await wait(80);
+    }
+  });
+
+  test('Not this one, band ran out: a wider window lets go of the height lock, so no blank space stays under the line; a height-only resize (a phone\'s address bar) keeps it', async () => {
+    try {
+      await fresh();
+      frame.style.width = '320px';
+      await wait(80);
+      fill('claude', { s: 85, w: 30 }); // Small
+      calc();
+      const btn = notBtn();
+      const order = idsIn('small');
+      for (let i = 1; i < order.length; i++) btn.click();
+      cards()[0].querySelector('details.steps').open = true; // a tall last card
+      await wait(0);
+      btn.click();
+      ok(outLine(), 'the band ran out');
+      ok($('recs-list').style.minHeight !== '', 'the card area holds its height at 320px');
+      frame.style.height = (frame.offsetHeight - 60) + 'px';
+      await wait(80);
+      W.dispatchEvent(new W.Event('resize'));
+      ok($('recs-list').style.minHeight !== '', 'a height-only resize keeps the lock');
+      frame.style.width = '1280px';
+      await wait(80);
+      W.dispatchEvent(new W.Event('resize')); // virtual time runs no rendering steps, so the browser's own resize event never comes
+      eq($('recs-list').style.minHeight, '', 'a wider window drops the lock');
+      const line = outLine().getBoundingClientRect();
+      const area = $('recs-list').getBoundingClientRect();
+      ok(area.bottom - line.bottom <= 1, 'no blank space under the line (' + (area.bottom - line.bottom) + 'px)');
+      ok(line.height < 200, 'the line takes its own height (' + line.height + 'px)');
+      eq(text(outLine()), PICKS_OUT, 'the line is still there');
+    } finally {
+      frame.style.width = '';
+      frame.style.height = '';
+      await wait(80);
     }
   });
 

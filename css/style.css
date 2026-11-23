@@ -205,7 +205,7 @@ input[type="text"], input[type="time"], select {
   max-width: 100%;
 }
 input[type="text"] { width: 100%; }
-input:focus, select:focus, textarea:focus, button:focus, summary:focus, a:focus {
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible {
   outline: 3px solid #7fb8a6;
   outline-offset: 2px;
 }
