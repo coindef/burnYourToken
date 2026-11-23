@@ -163,7 +163,7 @@
     ok(r.ok, '应该算得出来');
     eq(r.sessionHours, 5, '5 小时');
     eq(r.band, 'large', '档位');
-    ok(r.notes.some(n => n.indexOf("hasn't started") !== -1), '有说明');
+    ok(r.notes.some(n => n.indexOf('hasn’t started') !== -1), '有说明');
   });
 
   test('用了一部分却没填重置时间 → 提示要填', () => {
@@ -452,7 +452,7 @@
       eq(r.cards.map(p => p.id).join(), QP.PROJECTS.filter(p => p.band === band).map(p => p.id).join(), band + ' 全列、库顺序');
       r.cards.forEach(p => {
         eq(p.why.matches.length, 0, p.id + ' 没有对上的偏好');
-        ok(p.why.summary.indexOf('by band') !== -1, p.id + ' 写明按档位挑');
+        ok(p.why.summary.indexOf('In list order for this size.') !== -1, p.id + ' 写明按档位挑');
         ok(p.why.band.indexOf('Fits your') !== -1, p.id + ' 写明档位');
       });
     });
@@ -460,9 +460,9 @@
 
   test('档位理由：同档写「刚好用得上」，小一点的写「比你的剩余小」', () => {
     const r = C.recommend({ band: 'large' });
-    ok(r.cards[0].why.band.indexOf('Fits your Large band.') !== -1, r.cards[0].why.band);
+    ok(r.cards[0].why.band.indexOf('Fits your Large size.') !== -1, r.cards[0].why.band);
     const s = r.smaller.find(p => p.band === 'small');
-    ok(s.why.band.indexOf("Smaller than what's left (Small).") !== -1, s.why.band);
+    ok(s.why.band.indexOf('Smaller than what’s left (Small).') !== -1, s.why.band);
   });
 
   test('坏数据：问卷里不认识的选项 id 一律忽略，不算填了偏好', () => {
@@ -748,7 +748,7 @@
 
   // The issue's format, written out by hand so these checks do not reuse core's own code.
   function copyFormat(title, output, steps, done) {
-    return title + '\n\n' + 'What you\'ll end with: ' + output + '\n\n' + 'Steps:\n' +
+    return title + '\n\n' + 'What you’ll end with: ' + output + '\n\n' + 'Steps:\n' +
       steps.map((s, i) => (i + 1) + '. ' + s).join('\n') + '\n\n' + 'Done when: ' + done;
   }
   // Markdown the builder must not add: emphasis, code, links, headings, bullets, quotes, tables.
@@ -759,7 +759,7 @@
     return found.join(' / ');
   }
 
-  test('Copy for Claude text: exact plain-text format (title, What you\'ll end with, numbered Steps, Done when)', () => {
+  test('Copy for Claude text: exact plain-text format (title, What you’ll end with, numbered Steps, Done when)', () => {
     eq(typeof C.projectClipboardText, 'function', 'core.projectClipboardText is exported');
     const text = C.projectClipboardText({
       id: 'x', band: 'small', title: 'Plan a day out', output: 'A one-day plan.',
@@ -767,7 +767,7 @@
     });
     eq(text, 'Plan a day out\n' +
       '\n' +
-      'What you\'ll end with: A one-day plan.\n' +
+      'What you’ll end with: A one-day plan.\n' +
       '\n' +
       'Steps:\n' +
       '1. Say where you start.\n' +
@@ -785,7 +785,7 @@
     eq(text, copyFormat(p.title, p.output, p.steps, p.done), 'travel-day-trip');
     const lines = text.split('\n');
     eq(lines[0], 'Plan a one-day outing', 'title line');
-    eq(lines[2], 'What you\'ll end with: One day: when, where, how you get there, where you eat, and a backup if it rains.', 'output line');
+    eq(lines[2], 'What you’ll end with: One day: when, where, how you get there, where you eat, and a backup if it rains.', 'output line');
     eq(lines[4], 'Steps:', 'steps header');
     eq(lines[8], '4. Hours, ticket prices, and transit may be stale. Check a map and the official page before you go.', 'last step, numbered 4');
     eq(lines[lines.length - 1], 'Done when: A checked one-day plan plus a backup.', 'done line');
@@ -827,13 +827,13 @@
 
   test('Copy for Claude text: missing or empty steps leave out the Steps block; blank steps are skipped and the rest stay 1, 2', () => {
     const base = { title: 'T', output: 'O', done: 'D' };
-    const noSteps = 'T\n\nWhat you\'ll end with: O\n\nDone when: D';
+    const noSteps = 'T\n\nWhat you’ll end with: O\n\nDone when: D';
     eq(C.projectClipboardText(base), noSteps, 'no steps field');
     eq(C.projectClipboardText(Object.assign({ steps: [] }, base)), noSteps, 'steps: []');
     eq(C.projectClipboardText(Object.assign({ steps: null }, base)), noSteps, 'steps: null');
     eq(C.projectClipboardText(Object.assign({ steps: ['', '   ', null] }, base)), noSteps, 'only blank steps');
     eq(C.projectClipboardText(Object.assign({ steps: ['', ' First ', '  ', 'Second  half'] }, base)),
-      'T\n\nWhat you\'ll end with: O\n\nSteps:\n1. First\n2. Second half\n\nDone when: D',
+      'T\n\nWhat you’ll end with: O\n\nSteps:\n1. First\n2. Second half\n\nDone when: D',
       'blank steps skipped; spaces tidied the way the card shows them');
     eq(C.projectClipboardText({ title: 'T', steps: ['a'] }), 'T\n\nSteps:\n1. a', 'no output or done: those lines are left out');
   });
@@ -948,7 +948,7 @@
     eq(last.out, false, 'not out yet');
     eq(last.message, '', 'no line yet');
     // Every project done and nothing written: the band is empty, not run out. The page already
-    // says "You’ve finished every ready-made project in this band".
+    // says "You’ve finished every ready-made project in this size".
     const empty = C.onePick(C.recommend({ band: 'small', done: all }), 'small', []);
     eq(empty.pick, null, 'all done: no pick');
     eq(empty.out, false, 'all done is not "ran out"');
@@ -985,6 +985,52 @@
     eq(C.skipsAfter(['a', 7, null, 'b'], 'quiz').join(), 'a,b', 'ids that are not strings are dropped');
     eq(C.skipsAfter('junk', 'not-this-one', 'a').join(), 'a', 'not a list: starts from empty');
     eq(C.skipsAfter([], 'not-this-one', '').length, 0, 'no id: nothing added');
+  });
+
+  // ---------------- Copy (#35): users see "size", never "band", and typographic apostrophes ----------------
+  test('User-facing copy from core says "size", never "band", and has no straight apostrophe', () => {
+    const seen = [];
+    const add = (where, text) => { if (typeof text === 'string' && text) seen.push([where, text]); };
+    ['small', 'medium', 'large'].forEach(band => {
+      [
+        { band: band },
+        { band: band, outputs: ['plan'] },
+        { band: band, domains: ['travel'], wish: 'plan a weekend trip' }
+      ].forEach(opts => {
+        const r = C.recommend(opts);
+        r.cards.concat(r.others, r.smaller).forEach(p => {
+          add(p.id + ' why.band', p.why.band);
+          add(p.id + ' why.summary', p.why.summary);
+          (p.why.matches || []).forEach(m => add(p.id + ' why.matches', m));
+          add(p.id + ' clipboard', C.projectClipboardText(p));
+        });
+      });
+      add(band + ' label', C.BAND_INFO[band].label);
+      add(band + ' time', C.BAND_INFO[band].time);
+    });
+    [
+      { sessionPct: '0', sessionH: '', sessionM: '' },
+      { sessionPct: '40', sessionH: '', sessionM: '' },
+      { sessionPct: '95', sessionH: '0', sessionM: '20', weeklyPct: '10' },
+      { sessionPct: '10', sessionH: '7' },
+      { weeklyDay: '1', weeklyClock: '' },
+      { weeklyClock: '' },
+      { sessionPct: 'abc', weeklyPct: '200' },
+      { plan: 'api' }
+    ].forEach((over, i) => {
+      const r = calc(over);
+      (r.notes || []).forEach(n => add('notes ' + i, n));
+      (r.errors || []).forEach(e => add('errors ' + i, e.msg));
+    });
+    add('PICKS_OUT', C.PICKS_OUT);
+    ok(seen.length > 50, 'collected ' + seen.length + ' strings');
+    ok(seen.some(s => s[1] === 'In list order for this size.'), 'no-preferences line');
+    ok(seen.some(s => s[1] === 'This size fits; your preferences don’t.'), 'no-match line');
+    ok(seen.some(s => /^Fits your (Small|Medium|Large) size\.$/.test(s[1])), 'same-size line');
+    seen.forEach(s => {
+      ok(!/band/i.test(s[1]), s[0] + ' says band: ' + s[1]);
+      ok(s[1].indexOf("'") === -1, s[0] + ' has a straight apostrophe: ' + s[1]);
+    });
   });
 
   window.addEventListener('load', () => runTests());

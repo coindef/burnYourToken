@@ -208,7 +208,7 @@
   const FILL_OK = 'Filled from Usage.';
   const FILL_AGAIN = 'Updated from Usage.';
   const FILL_NO_EXT = 'No extension? No problem. Type your numbers below, or install it in 30 seconds.';
-  const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
+  const FILL_PARSE = 'Couldn’t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
 
   function removeUsageBridge() {
     if (W.__bytBridge) {
@@ -1076,7 +1076,7 @@
     ok(!$('recs-more').hidden, '其余项目在 More projects');
     eq($('recs-more').querySelector('summary').textContent.trim(), 'More projects');
     moreCards().forEach(c => {
-      if (whyOf(c).indexOf("preferences don't") !== -1) eq(c.dataset.band, 'large', c.dataset.id + ' 没对上的仍是同档');
+      if (whyOf(c).indexOf('preferences don’t') !== -1) eq(c.dataset.band, 'large', c.dataset.id + ' 没对上的仍是同档');
     });
     eq(cards().concat(moreCards()).filter(c => c.dataset.band === 'large').length, bandCount('large'), '同一档一个不少');
     ok(moreCards().some(c => c.dataset.band !== 'large'), '更小的档在同一个折叠');
@@ -1127,7 +1127,7 @@
       eq(cards().length, 1, c[1] + '：主列表一张');
       cards().forEach(n => {
         eq(n.dataset.band, c[1], n.dataset.id + ' 档位');
-        ok(whyOf(n).indexOf('by band') !== -1, n.dataset.id + ' 写着按档位挑');
+        ok(whyOf(n).indexOf('In list order for this size.') !== -1, n.dataset.id + ' 写着按档位挑');
         ok(!n.querySelector('.top-tag') && !n.querySelector('.badge'), n.dataset.id + ' 没有芯片');
       });
       eq(cards().concat(moreCards()).filter(n => n.dataset.band === c[1]).length, bandCount(c[1]), c[1] + '：其余同档在 More projects');
@@ -1181,7 +1181,7 @@
       eq(cards().length, 1, '主列表始终一张');
       if (i === 0) eq(cards()[0].dataset.id, 'work-message', '一开始是对上「工作上要用」的那张');
       if (i === 1) {
-        ok(statusText().indexOf('Nothing in this band matches') !== -1, '对上的做完了 → 说明是退回列出这一档的');
+        ok(statusText().indexOf('Nothing this size matches') !== -1, '对上的做完了 → 说明是退回列出这一档的');
         eq(moreCards().length, total - i - 1, '其余的在 More projects');
       }
       cards()[0].querySelector('.done-btn').click();
@@ -1189,11 +1189,11 @@
     }
     eq(cards().length, 0, '全做完了');
     ok(statusText().indexOf('finished every ready-made project') !== -1, '告诉你都做完了');
-    ok(statusText().indexOf('Nothing in this band matches') === -1, '不再说先列出来');
+    ok(statusText().indexOf('Nothing this size matches') === -1, '不再说先列出来');
     setVal('q-wish', '整理衣柜');
     eq(cards().length, 1, '写了想做的事 → 只剩那张现做的');
     ok(cards()[0].dataset.id === 'custom:整理衣柜', '是现做的那张');
-    ok(statusText().indexOf('card built from what you wrote') !== -1 && statusText().indexOf('Nothing in this band matches') === -1, statusText());
+    ok(statusText().indexOf('card built from what you wrote') !== -1 && statusText().indexOf('Nothing this size matches') === -1, statusText());
   });
 
   test('做完一个 → 提示回去重新算 → 重新算后推下一个，做完的不再出现', async () => {
@@ -1320,9 +1320,9 @@
     calc();
     setVal('claude-s-pct', '90');
     ok(text($('calc-results')).indexOf('Click Get project to update') !== -1, '第 1 步提示');
-    ok(statusText().indexOf("haven't clicked Get project") !== -1, '第 3 步提示');
+    ok(statusText().indexOf('haven’t clicked Get project') !== -1, '第 3 步提示');
     calc();
-    ok(statusText().indexOf("haven't clicked Get project") === -1, '算完提示消失');
+    ok(statusText().indexOf('haven’t clicked Get project') === -1, '算完提示消失');
   });
 
   test('全角数字（中文输入法）能算', async () => {
@@ -1413,7 +1413,7 @@
 
   // The issue's plain-text format, written out here so these checks do not reuse core.
   function copyText(p) {
-    return p.title + '\n\n' + 'What you\'ll end with: ' + p.output + '\n\n' + 'Steps:\n' +
+    return p.title + '\n\n' + 'What you’ll end with: ' + p.output + '\n\n' + 'Steps:\n' +
       p.steps.map((s, i) => (i + 1) + '. ' + s).join('\n') + '\n\n' + 'Done when: ' + p.done;
   }
 

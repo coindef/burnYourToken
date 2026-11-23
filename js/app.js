@@ -571,12 +571,12 @@
       domains: quiz.domains, otherDomain: quiz.other, wish: quiz.wish, outputs: quiz.outputs, audiences: quiz.audiences
     });
 
-    let head = 'From what’s left on ' + svc.name + ': ' + info.label + ' (' + info.time + '). Only this band.';
-    if (pick.reason === 'bigger') head += ' Two results were tied to different bands; this is the larger one.';
+    let head = 'From what’s left on ' + svc.name + ': ' + info.label + ' (' + info.time + '). Only this size.';
+    if (pick.reason === 'bigger') head += ' Two results pointed to different sizes; this is the larger one.';
     if (pick.reason === 'tie') head += ' Two results matched; this one is ' + svc.name + '.';
     renderChips(pick.id, r);
     status(head, 'band band-' + r.band);
-    if (state.edited) status("You changed the numbers and haven't clicked Get project. The project below still uses the last result.", 'warn');
+    if (state.edited) status('You changed the numbers and haven’t clicked Get project. The project below still uses the last result.', 'warn');
 
     if (!rec.personalized) {
       // True for every pick: Not this one swaps the card without redrawing these lines.
@@ -597,11 +597,11 @@
 
     const mine = rec.cards.filter(p => p.custom).length;
     if (rec.cards.length === mine) {
-      status('You’ve finished every ready-made project in this band. ' + (mine
+      status('You’ve finished every ready-made project in this size. ' + (mine
         ? 'You can do the card built from what you wrote, or look at a smaller one.'
         : 'Look at a smaller one below, or write what you want in question 2.'), 'ok');
     } else if (rec.fallback) {
-      status('Nothing in this band matches what you picked, so here is the whole band.', 'warn');
+      status('Nothing this size matches what you picked, so here is every project this size.', 'warn');
     }
     shownRec = { rec: rec, band: r.band };
     drawPick();
@@ -822,7 +822,7 @@
   const FILL_AGAIN = 'Updated from Usage.'; // 2nd+ successful read, so Fill again visibly responds
   const FILL_NO_EXT = 'No extension? No problem. Type your numbers below, or install it in 30 seconds.';
   const README_INSTALL = 'README.md#load-unpacked-30-seconds';
-  const FILL_PARSE = 'Couldn\'t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
+  const FILL_PARSE = 'Couldn’t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
   const FILL_TIMEOUT_MS = 1500;
   let fillGen = 0;
   let fillTimer = 0;
