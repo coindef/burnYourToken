@@ -481,7 +481,7 @@
   // ---------------- Not this one (#33): one pick at a time ----------------
 
   // What the card area says once Not this one has passed over every pick for this quota.
-  const PICKS_OUT = "That's every pick that fits this quota. Change your answers or come back after the reset.";
+  const PICKS_OUT = "That’s every pick that fits this quota. Change your answers or come back after the reset.";
 
   /*
    * The main path's one card, from recommend()'s result and the ids Not this one passed over.

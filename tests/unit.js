@@ -841,7 +841,7 @@
   // ---------------- Not this one (#33): one pick at a time from the band ----------------
 
   // The issue's line, written out here so these checks do not reuse core's own string.
-  const PICKS_OUT = "That's every pick that fits this quota. Change your answers or come back after the reset.";
+  const PICKS_OUT = "That’s every pick that fits this quota. Change your answers or come back after the reset.";
   const idsOf = list => list.map(p => p.id).join();
   const bandIds = band => QP.PROJECTS.filter(p => p.band === band).map(p => p.id);
 
@@ -935,6 +935,7 @@
 
   test('Not this one, band ran out: the exact line, only once every pick is skipped; More projects still lists them; an empty band (all done) or no quota says nothing new', () => {
     eq(C.PICKS_OUT, PICKS_OUT, 'core.PICKS_OUT is the issue’s line');
+    ok(C.PICKS_OUT.indexOf('That\u2019s') === 0 && C.PICKS_OUT.indexOf("'") === -1, 'a curly apostrophe (U+2019), no straight one');
     const rec = C.recommend({ band: 'small' });
     const all = bandIds('small');
     const out = C.onePick(rec, 'small', all);
