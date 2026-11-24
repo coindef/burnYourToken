@@ -181,7 +181,7 @@
     if (sessionHours === null && !sessionResetBad && sPct <= 100) {
       if (sessionLeft >= 100) {
         sessionHours = RULES.sessionHours;
-        notes.push("Session hasn't started, so this counts as a full 5 hours.");
+        notes.push('Session hasn’t started, so this counts as a full 5 hours.');
       } else {
         fail(input.sessionResetType === 'clock' ? 'sessionClock' : 'sessionCountdown',
           'Resets in is empty.');
@@ -273,8 +273,8 @@
     const mine = BAND_INFO[userBand].label;
     const its = BAND_INFO[projectBand].label;
     return projectBand === userBand
-      ? 'Fits your ' + mine + ' band.'
-      : "Smaller than what's left (" + its + ').';
+      ? 'Fits your ' + mine + ' size.'
+      : 'Smaller than what’s left (' + its + ').';
   }
 
   // 问卷回答 → 统一的偏好。只认列表里有的选项，乱写的 id 一律忽略。
@@ -326,8 +326,8 @@
     return { score: score, matches: matches };
   }
 
-  const NO_PREFS = 'Listed by band only.';
-  const NO_MATCH = "Band fits; your preferences don't.";
+  const NO_PREFS = 'In list order for this size.';
+  const NO_MATCH = 'This size fits; your preferences don’t.';
 
   // 用户自己写的「最近想做的事」，按档位做成一张项目卡
   function customProject(wish, band) {
@@ -472,7 +472,7 @@
     const done = clean(project.done);
     const blocks = [];
     if (title) blocks.push(title);
-    if (output) blocks.push("What you'll end with: " + output);
+    if (output) blocks.push('What you’ll end with: ' + output);
     if (steps.length) blocks.push('Steps:\n' + steps.map((s, i) => (i + 1) + '. ' + s).join('\n'));
     if (done) blocks.push('Done when: ' + done);
     return blocks.join('\n\n');
