@@ -2760,6 +2760,332 @@
     frame.style.width = '';
   });
 
+  // ---------------- Copy (#35): users see "size", never "band", and typographic apostrophes ----------------
+
+  // tests/unit.js checks the strings core.js builds. These two check what the page itself shows,
+  // so a "band" or a straight apostrophe written into index.html or js/app.js fails too.
+  // Checked: every text node outside script and style (hidden ones too: another state shows
+  // them), aria-label, title, placeholder and alt, a button's value, a read-only textarea's text
+  // (the Copy for Claude fallback) and a meta description. Not checked: ids, classes, data-*,
+  // name and storage keys, which are code, not copy.
+  const COPY_ATTRS = ['aria-label', 'title', 'placeholder', 'alt'];
+  const COPY_RULES = [
+    ['says "band"', /\bbands?\b/i],
+    ['straight apostrophe inside a word', /\w'\w/],
+    ['straight apostrophe after a word', /\w'(?!\w)/]
+  ];
+
+  // Where copy sits, for failure messages: the nearest id, then the element itself. from: the
+  // element a node was added to, named as well when the page has taken the node out again.
+  function placeOf(el, from) {
+    const host = el ? el.closest('[id]') : null;
+    const here = !el ? '' : host === el ? nodeName(el) : (host ? '#' + host.id + ' ' : '') + nodeName(el);
+    if (!from || host || (el && el.isConnected)) return here || '(detached)';
+    return placeOf(from) + (here ? ' ' + here : '') + ' (since removed)';
+  }
+
+  // One element's own copy: the attributes above, its value if it is a button, its text if it is
+  // a read-only textarea, its content if it is the meta description.
+  function copyOfElement(el, put, from) {
+    const at = placeOf(el, from);
+    COPY_ATTRS.forEach(a => { if (el.hasAttribute(a)) put(at + ' [' + a + ']', el.getAttribute(a)); });
+    const tag = el.tagName;
+    if (tag === 'BUTTON' || (tag === 'INPUT' && /^(button|submit|reset)$/i.test(el.type))) put(at + ' [value]', el.value);
+    if (tag === 'TEXTAREA' && el.readOnly) put(at + ' (text)', el.value);
+    if (tag === 'META' && /^description$/i.test(el.getAttribute('name') || '')) put('meta description [content]', el.getAttribute('content'));
+  }
+
+  // put(where, words) for every piece of copy in root: an element and everything in it, or one
+  // text node. from: the element root was added to (see placeOf).
+  function copyUnder(root, put, from) {
+    const code = el => !!(el && el.closest('script, style'));
+    if (root.nodeType === 3) {
+      if (!code(root.parentElement || from)) put(placeOf(root.parentElement, from), root.data);
+      return;
+    }
+    if (root.nodeType !== 1 || code(root)) return;
+    const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+      n => (n.nodeType === 1 && (n.tagName === 'SCRIPT' || n.tagName === 'STYLE') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT));
+    for (let n = root; n; n = walker.nextNode()) {
+      if (n.nodeType === 3) put(placeOf(n.parentElement, from), n.data);
+      else copyOfElement(n, put, from);
+    }
+  }
+
+  // items: [state, where, words]. Fails once, listing each problem (a rule broken in one
+  // sentence) with the first state and place it showed up in, how many more there were, and
+  // the words around it.
+  function expectCleanCopy(items, what) {
+    const found = new Map();
+    items.forEach(([state, where, words]) => {
+      const flat = String(words).replace(/\s+/g, ' ').trim();
+      COPY_RULES.forEach(([rule, re]) => {
+        const m = re.exec(flat);
+        if (!m) return;
+        const sentence = (flat.slice(0, m.index).match(/[^.!?…]*$/)[0] + flat.slice(m.index).match(/^[^.!?…]*[.!?…]?/)[0]).trim();
+        const key = rule + '\n' + sentence;
+        if (!found.has(key)) found.set(key, { rule: rule, hits: [], states: new Set(), places: new Set() });
+        const f = found.get(key);
+        const from = Math.max(0, m.index - 30);
+        const to = Math.min(flat.length, m.index + m[0].length + 30);
+        f.hits.push({ state: state, where: where, snippet: (from > 0 ? '…' : '') + flat.slice(from, to) + (to < flat.length ? '…' : '') });
+        f.states.add(state);
+        f.places.add(where);
+      });
+    });
+    const more = (set, noun) => (set.size > 1 ? ', +' + (set.size - 1) + ' more ' + noun : '');
+    const lines = Array.from(found.values()).map(f => {
+      // Name a place where it stayed on the page, if any, over a node redrawn in the same turn.
+      const h = f.hits.find(x => !/\(since removed\)$/.test(x.where)) || f.hits[0];
+      return f.rule + ' in [' + h.state + more(f.states, 'states') + '] at ' + h.where + more(f.places, 'places') + ': "' + h.snippet + '"';
+    });
+    ok(!lines.length, what + ': ' + lines.length + ' problem(s): ' + lines.slice(0, 8).join(' | ') + (lines.length > 8 ? ' | …' : ''));
+  }
+
+  // Records the app's copy, tagged with the state it showed up in. at(name, act) names the state,
+  // runs act, then files the whole page. Meanwhile a MutationObserver files each text and label
+  // the page adds or changes, and a live region's whole text each time it changes (what a screen
+  // reader is told), so lines that are said and then cleared (Copied…, New pick…, Filled from
+  // Usage.) are checked too.
+  function copyRecorder() {
+    const items = [];
+    let state = '';
+    const put = (where, words) => {
+      if (typeof words === 'string' && words.trim()) items.push([state, where, words]);
+    };
+    const LIVE = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
+    function file(records) {
+      const regions = [];
+      records.forEach(m => {
+        if (m.type === 'childList') m.addedNodes.forEach(n => copyUnder(n, put, m.target));
+        else if (m.type === 'characterData') copyUnder(m.target, put);
+        else copyOfElement(m.target, put);
+        const el = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+        const region = el && el.closest(LIVE);
+        if (region && regions.indexOf(region) === -1) regions.push(region);
+      });
+      regions.forEach(r => put(placeOf(r) + ' (live region)', r.textContent));
+    }
+    const mo = new W.MutationObserver(file);
+    mo.observe(D.documentElement, {
+      subtree: true, childList: true, characterData: true,
+      attributes: true, attributeFilter: COPY_ATTRS.concat('value')
+    });
+    return {
+      items: items,
+      at: async (name, act) => {
+        file(mo.takeRecords());
+        state = name;
+        if (act) await act();
+        await wait(0);
+        file(mo.takeRecords());
+        copyUnder(D.documentElement, put);
+      },
+      stop: () => {
+        file(mo.takeRecords());
+        mo.disconnect();
+      }
+    };
+  }
+
+  test('Copy (#35), index.html as shipped: no "band" and no straight apostrophe in its text (outside script/style), aria-label, title, placeholder, alt, button values or meta description', async () => {
+    // Fetched by this page: the app frame's CSP has connect-src 'none'.
+    const res = await fetch('../index.html', { cache: 'no-store' });
+    eq(res.status, 200, 'GET ../index.html');
+    const src = await res.text();
+    const doc = new DOMParser().parseFromString(src, 'text/html');
+    // index.html:<line> where the words first occur in the source, as written or &-escaped.
+    const lineOf = words => {
+      const probe = words.trim().split('\n')[0].trim().slice(0, 40);
+      const escaped = probe.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const at = [probe, escaped].map(p => src.indexOf(p)).find(i => i !== -1);
+      return at == null ? 'index.html' : 'index.html:' + src.slice(0, at).split('\n').length;
+    };
+    const items = [];
+    copyUnder(doc.documentElement, (where, words) => {
+      if (typeof words === 'string' && words.trim()) items.push(['source', lineOf(words) + ' ' + where, words]);
+    });
+    expectCleanCopy(items, 'index.html');
+    // It read the real page: the title, the size rules, a label and a placeholder are there.
+    [/^Leftover Claude quota\?$/, /^How is the (size|band) chosen\?$/, /If you.re limited by Session/, /^Claude usage$/, /^e\.g\. Mom.s 60th birthday/]
+      .forEach(re => ok(items.some(i => re.test(i[2])), 'index.html: nothing matched ' + re));
+  });
+
+  test('Copy (#35), the page in every main state (Fill, each size and nothing left, preferences, edited numbers, Copy for Claude, Not this one, Mark done, every <details> open): no "band" and no straight apostrophe in any text, label or live-region announcement', async () => {
+    const usage = fixtureUsage();
+    await fresh();
+    await reloadApp(); // a first visit: nothing saved, nothing typed
+    const rec = copyRecorder();
+    const at = rec.at;
+    const size = () => resultOf('claude') && resultOf('claude').dataset.band;
+    let restoreClip = () => {};
+    try {
+      await at('fresh page');
+
+      // Fill from Claude Usage: no extension, an unreadable Usage page, a read, a second read.
+      await at('Fill, no extension', async () => {
+        removeUsageBridge();
+        $('fill-usage-btn').click();
+        await wait(1700);
+      });
+      await at('Fill, Usage unreadable', async () => {
+        installUsageBridge(() => ({ ok: false, error: 'parse' }));
+        $('fill-usage-btn').click();
+        await flushFill();
+      });
+      await at('Fill, read', async () => {
+        installUsageBridge(() => ({ ok: true, usage: usage }));
+        $('fill-usage-btn').click();
+        await flushFill();
+      });
+      await at('Fill, read again', async () => {
+        $('fill-usage-btn').click();
+        await flushFill();
+      });
+      await at('percentages as % left', () => pick('input[name="claude-mode"][value="left"]'));
+      pick('input[name="claude-mode"][value="used"]');
+
+      // Get project with no plan, with API billing, with numbers that do not work.
+      await at('Get project, no plan', () => { setVal('claude-plan', ''); calc(); });
+      await at('Get project, API billing', () => { setVal('claude-plan', 'api'); calc(); });
+      await at('Get project, wrong numbers', () => {
+        fill('claude', { s: 150, w: 30 });
+        setVal('claude-w-day', '');
+        calc();
+      });
+
+      // Each size, and nothing left (waiting on Session, then on Weekly), with no preferences.
+      for (const [name, want, o] of [
+        ['Small', 'small', { s: 85, w: 30 }],
+        ['Medium', 'medium', { s: 72, h: 3, m: 12, w: 31 }],
+        ['Large', 'large', { s: 30, w: 40 }],
+        ['Nothing left (Session)', 'none', { s: 100, w: 50 }],
+        ['Nothing left (Weekly)', 'none', { s: 20, w: 100 }]
+      ]) {
+        await at(name + ', Get project, no preferences', () => { fill('claude', o); calc(); });
+        eq(size(), want, name + ': size');
+      }
+      await at('Large, numbers changed after Get project', () => {
+        fill('claude', { s: 30, w: 40 });
+        calc();
+        setVal('claude-s-pct', '35');
+      });
+
+      // Preferences: every question answered, every <details> opened, then answers nothing matches.
+      await at('Large, Get project with every question answered', () => {
+        pick('input[name="q-domain"][value="travel"]');
+        setVal('q-other', 'pets');
+        setVal('q-wish', 'plan a weekend trip');
+        pick('input[name="q-output"][value="plan"]');
+        pick('input[name="q-audience"][value="family"]');
+        calc();
+      });
+      ok(cards().length === 1 && moreCards().length > 0, 'a hero and More projects');
+      await at('every <details> open', () => D.querySelectorAll('details').forEach(d => { d.open = true; }));
+      await at('Small, Get project with answers no project matches', () => {
+        unpick('input[name="q-domain"][value="travel"]');
+        unpick('input[name="q-output"][value="plan"]');
+        unpick('input[name="q-audience"][value="family"]');
+        setVal('q-wish', '');
+        setVal('q-other', 'xyzzy'); // in no project's words
+        fill('claude', { s: 85, w: 30 });
+        calc();
+      });
+      eq(cards().length, 1, 'a Small hero');
+
+      // Copy for Claude: copied (label and live region), then a refused write (the manual-copy box).
+      await at('Copy for Claude, copied', async () => {
+        restoreClip = setClipboard(fakeClipboard(writeOk));
+        copyBtnOf(cards()[0]).click();
+        await wait(150); // the live region speaks 100ms after the click
+      });
+      restoreClip();
+      await at('Copy for Claude, write refused', async () => {
+        restoreClip = setClipboard(fakeClipboard(writeDenied));
+        copyBtnOf(cards()[0]).click();
+        await wait(0);
+      });
+      restoreClip();
+      restoreClip = () => {};
+      eq(shownAreas(cards()[0]).length, 1, 'the manual-copy box is open');
+
+      // Not this one until the size runs out: each New pick line, then the run-out line.
+      const picks = cards().length + moreCards().filter(c => c.dataset.band === 'small').length;
+      for (let i = 1; i <= picks; i++) {
+        await at(i < picks ? 'Not this one, swap ' + i : 'Not this one, the size ran out', async () => {
+          notBtn().click();
+          await wait(150); // New pick is said 100ms after the click
+        });
+      }
+      ok(outLine() && notBtn().getAttribute('aria-disabled') === 'true', 'the size ran out');
+
+      // Mark done, Fill again, then Mark done until every ready-made Small project is finished.
+      await at('Get project again', () => calc());
+      await at('Mark done', () => cards()[0].querySelector('.done-btn').click());
+      await at('Fill again', async () => {
+        $('recalc-btn').click();
+        await flushFill();
+      });
+      await at('Get project after Fill again', () => calc());
+      await at('Small, Mark done until every ready-made project is finished', () => {
+        setVal('q-other', '');
+        fill('claude', { s: 85, w: 30 });
+        calc();
+        for (let i = 0; i < 30 && cards().length; i++) {
+          cards()[0].querySelector('.done-btn').click();
+          calc();
+        }
+      });
+      eq(cards().length, 0, 'every Small project is done');
+      await at('every ready-made project finished, then a wish written', () => setVal('q-wish', 'tidy the closet'));
+      ok(cards().length === 1 && cards()[0].dataset.id.indexOf('custom:') === 0, 'only the card built from the wish');
+      await at('Clear my answers', () => $('clear-btn').click());
+    } finally {
+      rec.stop();
+      restoreClip();
+      removeUsageBridge();
+    }
+    expectCleanCopy(rec.items, 'page');
+    // The walk reached every state: each of these was shown, said or labeled at least once
+    // (where: the place it must be in). Apostrophes and size words are loose here, so a bad
+    // copy edit fails the check above, not this one.
+    [
+      [/^Reading Usage/, '#fill-status'],
+      [/^No extension\? No problem\./, '#fill-status'],
+      [/^Couldn.t read Usage\./, '#fill-status'],
+      [/^Filled from Usage\.$/, '#fill-status'],
+      [/^Updated from Usage\.$/, '#fill-status'],
+      [/^Session percent left$/, '#claude-s-pct'],
+      [/^Choose a plan, then Get project\.$/, '#calc-results'],
+      [/^Get project to see a recommendation\.$/, '#recs-status'],
+      [/no session\/weekly window/, '#calc-results'],
+      [/^Missing Session \/ Resets in \/ Weekly$/, '#calc-results'],
+      [/Small \(About 15–30 minutes\)\. Only this (size|band)\.$/, '#recs-status'],
+      [/Medium \(About an hour\)\. Only this (size|band)\.$/, '#recs-status'],
+      [/Large \(About 2–3 hours\)\. Only this (size|band)\.$/, '#recs-status'],
+      [/^Claude has nothing left\. Wait for Session to reset/, '#recs-status'],
+      [/^Claude has nothing left\. Wait for Weekly to reset/, '#recs-status'],
+      [/^You changed the numbers\. Click Get project to update\.$/, '#calc-results'],
+      [/^You changed the numbers and haven.t clicked Get project\./, '#recs-status'],
+      [/^No preferences yet\. Picks go in list order\.$/, '#recs-status'],
+      [/^Sorted by your answers — Area: Travel, pets; Want to do: plan a weekend trip; /, '#recs-status'],
+      [/^Nothing this (size|band) matches what you picked/, '#recs-status'],
+      [/^Copied\. Go paste\.$/, '#recs-list'],
+      [/^Copied\. Paste it into Claude\.$/, '#recs-list'],
+      [/^Text for Claude$/, '#recs-list'],
+      [/What you.ll end with: /, '#recs-list'],
+      [/^New pick: /, '#pick-live'],
+      [/^That.s every pick that fits this quota\./, '#pick-live'],
+      [/^These numbers are out of date\./, '#stale-warn'],
+      [/^Finished 1 this round: /, '#recs-status'],
+      [/^You.ve finished every ready-made project in this (size|band)\. Look at a smaller one/, '#recs-status'],
+      [/^You.ve finished every ready-made project in this (size|band)\. You can do the card built/, '#recs-status'],
+      [/^Cleared quiz answers, step 1 numbers, and finished projects\.$/, '#clear-msg'],
+      [/^How is the (size|band) chosen\?$/, '#overflow']
+    ].forEach(([re, where]) => ok(rec.items.some(i => re.test(i[2]) && i[1].indexOf(where) === 0),
+      'never saw ' + re + ' in ' + where + ': the walk did not reach that state'));
+  });
+
   test('整个测试过程中页面没有脚本报错', () => {
     eq(appErrors.length, 0, appErrors.join(' / '));
   });
