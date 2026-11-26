@@ -2842,6 +2842,60 @@
     }
   });
 
+  test('Mark done rewrites #done-line after the banner is shown, so a screen reader that only hears text changes gets the line once; Undo disappearing does not rewrite it', async () => {
+    instantScroll(true);
+    try {
+      const hero = await heroForCopy();
+      const line = $('done-line');
+      const banner = $('done-banner');
+      const seen = [];
+      const mo = new W.MutationObserver(() => {
+        if (!banner.hidden) seen.push(line.textContent);
+      });
+      mo.observe(line, { childList: true, characterData: true, subtree: true });
+      doneBtnOf(hero).click();
+      ok(!banner.hidden, 'the banner is visible');
+      await wait(0); // MutationObserver records arrive as a microtask
+      ok(seen.some(t => String(t).trim() === DONE_LINE), 'a text or childList mutation after the banner is visible: ' + JSON.stringify(seen));
+      eq(seen.filter(t => String(t).trim() === DONE_LINE).length, 1, 'the line is written once while visible, not twice: ' + JSON.stringify(seen));
+      eq(text(line).trim(), DONE_LINE, 'the same string as before');
+      const n = seen.length;
+      W.QP.app.expireUndo();
+      await wait(0);
+      ok(!isShown(undoBtn()), 'Undo is gone');
+      eq(seen.length, n, 'Undo disappearing does not mutate the line');
+      eq(text(line).trim(), DONE_LINE, 'the line is unchanged');
+      mo.disconnect();
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('focusout with relatedTarget still in the done banner does not start a new Undo timer, even when document.activeElement is already outside and nothing is hovered', async () => {
+    instantScroll(true);
+    let clock = null;
+    try {
+      clock = holdUndoTimer();
+      const hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      leaveDoneBanner();
+      eq(D.activeElement, $('claude-plan'), 'focus is already outside the banner');
+      eq(clock.pending().length, 1, 'one window is running');
+      const sets = clock.sets();
+      const cleared = clock.cleared();
+      // The mid-event shape where only the relatedTarget check matters: relatedTarget is
+      // still in the banner, but activeElement is already outside and there is no hover.
+      // A live Tab from Fill again to Undo is already guarded by bannerHoldsUndo().
+      $('recalc-btn').dispatchEvent(new W.FocusEvent('focusout', { bubbles: true, relatedTarget: undoBtn() }));
+      eq(clock.sets(), sets, 'no new timer was started');
+      eq(clock.cleared(), cleared, 'the running window was not cleared and replaced');
+      eq(clock.pending().length, 1, 'the same window is still pending');
+    } finally {
+      if (clock) clock.restore();
+      instantScroll(false);
+    }
+  });
+
   test('Done state: the hidden Get project leaves no gap; its row (.calc-actions) takes no space, so step 1 ends at the Claude usage fieldset, not 16px below it; after Fill again Get project is back 16px under the fieldset', async () => {
     const usage = fixtureUsage();
     instantScroll(true);
