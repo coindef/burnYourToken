@@ -207,6 +207,7 @@
   // ---------------- 第 1 步：算 ----------------
 
   function calculate() {
+    if (state.stale) return; // the done state: only Fill again starts a new read, then Get project
     const now = QP.now();
     state.results = {};
     clearInvalid();
@@ -768,22 +769,46 @@
     renderResults();
     renderRecs();
     $('undo-btn').hidden = false;
-    undoTimer = setTimeout(expireUndo, QP.app.UNDO_MS);
+    armUndoTimer(); // clears any leftover timer first, then starts one unless the banner holds focus
     scrollToTarget($('recs'), 'start', $('recalc-btn'));
   }
 
   // Undo (in the done banner): for QP.app.UNDO_MS after a Mark done, takes it back. It lives
   // only while its banner is up (renderRecsBody drops it with the banner: Fill again, Clear,
   // Try sample); leaving the page drops it too, and nothing about it is saved, so a refresh
-  // never offers it. No confirm. The banner's role="status" is the only announcement: nothing
-  // is said in #pick-live for Mark done or Undo.
+  // never offers it. No confirm. The banner's line (#done-line, role="status") is the only
+  // announcement, without the button names: nothing is said in #pick-live for Mark done or Undo.
   let undo = null; // what Mark done changed, so Undo can put it back
   let undoTimer = 0;
+  let undoPointerInBanner = false; // mouseenter/leave on #done-banner; :hover is not enough for tests
 
-  function dropUndo() {
+  function bannerHoldsUndo() {
+    if (!undo || $('undo-btn').hidden) return false;
+    const banner = $('done-banner');
+    if (!banner || banner.hidden) return false;
+    if (undoPointerInBanner) return true;
+    const ae = document.activeElement;
+    return !!(ae && banner.contains(ae));
+  }
+
+  function pauseUndoTimer() {
     clearTimeout(undoTimer);
     undoTimer = 0;
+  }
+
+  // Start a fresh UNDO_MS window, after clearing any leftover timer. No window while the
+  // banner is hovered or contains focus (WCAG 2.2.1): a leave then starts a new one.
+  function armUndoTimer() {
+    pauseUndoTimer();
+    if (!undo || $('undo-btn').hidden) return;
+    if (bannerHoldsUndo()) return;
+    undoTimer = setTimeout(expireUndo, QP.app.UNDO_MS);
+  }
+
+  function dropUndo() {
+    pauseUndoTimer();
     undo = null;
+    undoPointerInBanner = false;
     $('undo-btn').hidden = true;
   }
 
@@ -1137,6 +1162,14 @@
     $('skip-btn').addEventListener('click', skipQuiz);
     $('recalc-btn').addEventListener('click', goRecalc);
     $('undo-btn').addEventListener('click', undoDone);
+    const banner = $('done-banner');
+    banner.addEventListener('mouseenter', () => { undoPointerInBanner = true; pauseUndoTimer(); });
+    banner.addEventListener('mouseleave', () => { undoPointerInBanner = false; armUndoTimer(); });
+    banner.addEventListener('focusin', pauseUndoTimer);
+    banner.addEventListener('focusout', ev => {
+      if (ev.relatedTarget && banner.contains(ev.relatedTarget)) return;
+      armUndoTimer();
+    });
     // Leaving the page takes Undo away, so one shown again from the back/forward cache has none.
     window.addEventListener('pagehide', dropUndo);
     pickVoice = voiceOf($('pick-live'));
@@ -1158,6 +1191,6 @@
     postToPage: function (payload) { window.postMessage(payload, '*'); },
     // How long Undo stays after Mark done, read at each Mark done; expireUndo is what the
     // timer runs, so tests can end it without waiting (headless runs use virtual time).
-    UNDO_MS: 8000, expireUndo: expireUndo
+    UNDO_MS: 8000, expireUndo: expireUndo, markDone: markDone
   };
 })();

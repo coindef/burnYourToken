@@ -272,6 +272,9 @@ button {
 }
 .secondary:hover { background: var(--bg); }
 .calc-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+/* The done state hides Get project (js/app.js syncOnboarding); its row goes too, so the row's
+   margin leaves no gap under step 1. */
+.calc-actions:has(> #calc-btn[hidden]) { display: none; }
 .calc-actions button { flex: 1 1 100%; }
 .focus-actions { margin-top: 22px; }
 .focus-actions .primary { width: 100%; font-size: 18px; min-height: 52px; }
