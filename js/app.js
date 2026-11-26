@@ -234,8 +234,8 @@
     focusHeroAfterGet();
   }
 
-  // Every scroll the page makes goes through here: Get project, Mark done, Fill again, Fill,
-  // Try sample, Skip, and the manual fields. The reduced-motion preference is read on each
+  // Every scroll the page makes goes through here: Get project, Mark done, Undo, Fill again,
+  // Fill, Try sample, Skip, and the manual fields. The reduced-motion preference is read on each
   // call (core.scrollBehaviorFor), so switching it mid-session applies to the next scroll:
   // reduce → behavior 'auto', an instant jump (css/style.css smooths html only for
   // no-preference); otherwise 'smooth'. Focus, if given, moves after the scroll starts and
@@ -534,6 +534,7 @@
     drawPick();
     pickVoice.hush(); // a New pick line from an earlier swap no longer describes the card
     $('done-banner').hidden = !state.stale;
+    if (!state.stale) dropUndo(); // Undo goes with its banner: Fill again, Clear, Try sample, Undo
     renderChips(null, null);
 
     const quiz = readQuiz();
@@ -725,6 +726,8 @@
   }
 
   // Applies the onboarding view. Does not click Get project or Mark done.
+  // The done state (after Mark done, also after a refresh) hides Get project: Fill again is
+  // the one way on, so the next project is picked from numbers read after the session.
   function syncOnboarding() {
     const phase = currentPhase();
     const view = core.onboardingView(phase);
@@ -732,7 +735,7 @@
     const fields = $('usage-fields');
     if (fields) fields.hidden = !(view.showPlanAndGrid || state.manual);
     const getBtn = $('calc-btn');
-    if (getBtn) getBtn.hidden = !(view.showGetProject || state.manual);
+    if (getBtn) getBtn.hidden = state.stale || !(view.showGetProject || state.manual);
     const recs = $('recs');
     if (recs) recs.hidden = phase !== 'project' && !state.stale;
     const main = document.querySelector('main');
@@ -744,7 +747,15 @@
   }
 
   // 做完一个：记下来，提示用户回用量页重新算，再推下一个（v0 手动，不自动追踪）
+  // A Fill still reading Usage is dropped: its reply would land in the done state and hand the
+  // hidden Get project the primary and focus. Fill again starts a new read.
   function markDone(p) {
+    undo = {
+      id: p.id, done: state.done.slice(), doneTitles: state.doneTitles.slice(),
+      lastDone: state.lastDone, filled: state.filled, primary: primaryNow
+    };
+    fillGen += 1;
+    showFillStatus('', '');
     if (state.done.indexOf(p.id) === -1) {
       state.done.push(p.id);
       state.doneTitles.push(p.title);
@@ -756,7 +767,58 @@
     save();
     renderResults();
     renderRecs();
+    $('undo-btn').hidden = false;
+    undoTimer = setTimeout(expireUndo, QP.app.UNDO_MS);
     scrollToTarget($('recs'), 'start', $('recalc-btn'));
+  }
+
+  // Undo (in the done banner): for QP.app.UNDO_MS after a Mark done, takes it back. It lives
+  // only while its banner is up (renderRecsBody drops it with the banner: Fill again, Clear,
+  // Try sample); leaving the page drops it too, and nothing about it is saved, so a refresh
+  // never offers it. No confirm. The banner's role="status" is the only announcement: nothing
+  // is said in #pick-live for Mark done or Undo.
+  let undo = null; // what Mark done changed, so Undo can put it back
+  let undoTimer = 0;
+
+  function dropUndo() {
+    clearTimeout(undoTimer);
+    undoTimer = 0;
+    undo = null;
+    $('undo-btn').hidden = true;
+  }
+
+  // The time is up (what the timer runs). Undo had focus: hand it to Fill again, not the page.
+  function expireUndo() {
+    if (document.activeElement === $('undo-btn')) $('recalc-btn').focus({ preventScroll: true });
+    dropUndo();
+  }
+
+  // The same card comes back where it was, the hero or under More projects (opened if folded),
+  // and the page is as it was before Mark done. Focus goes to that card's Mark done, scrolled
+  // only as far as it must be; if the card is not drawn now (the answers changed meanwhile),
+  // to the recommendations heading.
+  function undoDone() {
+    const u = undo;
+    if (!u) return;
+    state.done = u.done;
+    state.doneTitles = u.doneTitles;
+    state.lastDone = u.lastDone;
+    state.stale = false;
+    state.filled = u.filled;
+    setPrimary(u.primary);
+    save();
+    renderResults();
+    renderRecs();
+    const back = Array.from(document.querySelectorAll('#recs-list .card, #more-list .card')).find(c => c.dataset.id === u.id);
+    if (!back) {
+      scrollToTarget($('recs'), 'start', $('recs-title'));
+      return;
+    }
+    if ($('more-list').contains(back)) {
+      $('overflow').open = true;
+      $('recs-more').open = true;
+    }
+    scrollToTarget(back, 'nearest', back.querySelector('.done-btn'));
   }
 
   // 跳过问卷：不动已经填的，直接去第 3 步
@@ -813,7 +875,8 @@
     state.lastDone = typeof data.lastDone === 'string' ? data.lastDone : '';
     state.stale = !!data.stale && !!state.lastDone;
     state.usageReady = inputsReady();
-    if (shownServices().some(s => $(s.id + '-plan').value)) $('restore-note').hidden = false;
+    // The note says Get project; the done state hides Get project, so it stays hidden then too.
+    if (!state.stale && shownServices().some(s => $(s.id + '-plan').value)) $('restore-note').hidden = false;
   }
 
   // Fill from Claude Usage. Copy is the UX lock; one click only writes step 1 fields.
@@ -927,7 +990,10 @@
   //   'get'   – Fill succeeded and a plan is chosen: Get project
   //   'again' – after Mark done: the banner's Fill again
   // Get project is promoted only by a successful Fill plus a chosen plan.
+  // Undo puts back the primary Mark done replaced.
+  let primaryNow = '';
   function setPrimary(which) {
+    primaryNow = which;
     [['fill-usage-btn', 'fill'], ['calc-btn', 'get'], ['recalc-btn', 'again']].forEach(pair => {
       const btn = $(pair[0]);
       if (!btn) return;
@@ -1043,7 +1109,9 @@
     });
 
     const calcForm = $('calc-form');
-    calcForm.addEventListener('submit', e => { e.preventDefault(); calculate(); });
+    // Enter in a field still submits through Get project while it is hidden (the browser clicks
+    // the first submit button, display:none or not), so the done state ignores the submit.
+    calcForm.addEventListener('submit', e => { e.preventDefault(); if (!state.stale) calculate(); });
     const onCalcEdit = () => {
       $('clear-msg').hidden = true;
       if (!applyingFill) {
@@ -1063,10 +1131,14 @@
     quizForm.addEventListener('change', onQuizEdit);
 
     $('clear-btn').addEventListener('click', clearAll);
-    $('fill-usage-btn').addEventListener('click', fillFromUsage);
+    // In the done state Fill does what Fill again does: Get project stays hidden until a new read.
+    $('fill-usage-btn').addEventListener('click', () => (state.stale ? goRecalc() : fillFromUsage()));
     $('example-btn').addEventListener('click', fillExample);
     $('skip-btn').addEventListener('click', skipQuiz);
     $('recalc-btn').addEventListener('click', goRecalc);
+    $('undo-btn').addEventListener('click', undoDone);
+    // Leaving the page takes Undo away, so one shown again from the back/forward cache has none.
+    window.addEventListener('pagehide', dropUndo);
     pickVoice = voiceOf($('pick-live'));
     $('not-this-btn').addEventListener('click', notThisOne);
     window.addEventListener('resize', releaseLock);
@@ -1083,6 +1155,9 @@
     SERVICES: SERVICES, state: state, calculate: calculate, renderRecs: renderRecs, clearAll: clearAll,
     // Same-window post, so a reply's source is this tab (the extension content script does this too).
     renderResults: renderResults, syncStaleWarning: syncStaleWarning,
-    postToPage: function (payload) { window.postMessage(payload, '*'); }
+    postToPage: function (payload) { window.postMessage(payload, '*'); },
+    // How long Undo stays after Mark done, read at each Mark done; expireUndo is what the
+    // timer runs, so tests can end it without waiting (headless runs use virtual time).
+    UNDO_MS: 8000, expireUndo: expireUndo
   };
 })();
