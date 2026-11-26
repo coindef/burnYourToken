@@ -1266,6 +1266,26 @@
     ok(text($('quiz')).indexOf('ChatGPT') === -1, text($('quiz')));
   });
 
+  test('Two results (a ChatGPT result injected; the page still shows only Claude): different sizes pick the larger and say so; the same size stays on Claude and says they matched', async () => {
+    await fresh();
+    fill('claude', { s: 60, w: 40 });
+    calc();
+    eq(resultOf('claude').dataset.band, 'medium', 'Claude alone is Medium');
+    ok(statusText().indexOf('Two results') === -1, 'one result: no two-results line: ' + statusText());
+    // calculate() only writes shown services, so the second result is Claude's with another
+    // size, drawn by renderRecs(). Get project would drop it.
+    const results = W.QP.app.state.results;
+    results.chatgpt = Object.assign({}, results.claude, { band: 'large' });
+    W.QP.app.renderRecs();
+    ok(statusText().indexOf('From what’s left on ChatGPT（Codex）: Large (About 2–3 hours). Only this size. Two results pointed to different sizes; this is the larger one.') !== -1, 'bigger: ' + statusText());
+    ok(statusText().indexOf('Two results matched') === -1, 'bigger: not the matched line: ' + statusText());
+    eq(cards()[0].dataset.band, 'large', 'bigger: the pick is from the larger size');
+    results.chatgpt.band = results.claude.band;
+    W.QP.app.renderRecs();
+    ok(statusText().indexOf('From what’s left on Claude: Medium (About an hour). Only this size. Two results matched; this one is Claude.') !== -1, 'tie: ' + statusText());
+    ok(statusText().indexOf('Two results pointed') === -1, 'tie: not the larger line: ' + statusText());
+  });
+
   test('按 API 用量付钱 → 写明不适用，不出档位', async () => {
     await fresh();
     setVal('claude-plan', 'api');
