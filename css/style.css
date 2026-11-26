@@ -489,6 +489,11 @@ button {
   background: var(--ok-bg);
   border: 1px solid #b7dcc5;
 }
+/* The line sits as far from the top edge as the buttons from the bottom. Undo (secondary,
+   only for a few seconds after Mark done) follows Fill again with the card buttons' gap,
+   which keeps Fill again's focus ring clear of it. */
+#done-line { margin: 0 0 12px; }
+.done-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .done-title { margin: 0 0 6px; font-weight: 700; font-size: 18px; color: var(--ok); }
 
 .overflow { margin-top: 22px; }

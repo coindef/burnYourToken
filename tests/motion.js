@@ -14,7 +14,8 @@
  * tabbable element after the target, worked out by a DOM walk.
  *
  * Not this one (#33) swaps the card and must not move the page at all, with either
- * preference: its rows expect 'still' (see judgeStill).
+ * preference: its rows expect 'still' (see judgeStill). Undo on the hero only has to bring
+ * its Mark done up into view, too short to classify by travel (see judgeShort).
  * The key comes from the runner: window.bytMotionKey is a CDP Runtime.addBinding,
  * and motion_run.py answers each call with Input.dispatchKeyEvent (rawKeyDown,
  * then keyUp). A synthetic KeyboardEvent would not move focus.
@@ -138,11 +139,19 @@
 
   // Where scrollIntoView({ block }) alone leaves the page for node: scroll-margin included,
   // clamped to the scroll range. A focus() that scrolled mid-way would leave it elsewhere.
+  // nearest (for a node shorter than the view): no move once it is in view, else the edge it
+  // is past lines up with that edge of the view.
   function restingTop(node, block) {
     const view = D.documentElement.clientHeight;
     const r = node.getBoundingClientRect();
     const margin = parseFloat(W.getComputedStyle(node).scrollMarginTop) || 0;
-    const want = block === 'center' ? r.top + r.height / 2 - view / 2 : r.top - margin;
+    const marginBottom = parseFloat(W.getComputedStyle(node).scrollMarginBottom) || 0;
+    let want = r.top - margin;
+    if (block === 'center') want = r.top + r.height / 2 - view / 2;
+    if (block === 'nearest') {
+      const below = r.bottom + marginBottom - view;
+      want = want < 0 ? want : below > 0 ? below : 0;
+    }
     const max = D.scrollingElement.scrollHeight - view;
     return Math.round(Math.max(0, Math.min(max, scrollTop() + want)));
   }
@@ -418,6 +427,44 @@
     return Object.assign(motion, await tabCheck(btn));
   }
 
+  // Undo right after Mark done: the card comes back and focus goes to its Mark done, fully in
+  // view, without a yank; the page scrolls only as far as it must (block nearest). The hero
+  // comes back where the banner was, and in this short view its Mark done sits a little below
+  // the fold: a short scroll (see judgeShort). A More projects card (the last one) is far from
+  // the banner: a long scroll, smooth or instant like every other. Undo's timer is set long so
+  // it cannot run out during a check.
+  async function runUndo(fromMore) {
+    await prepareGet();
+    W.QP.app.UNDO_MS = 60000;
+    D.getElementById('calc-btn').click();
+    await settled();
+    let card = D.querySelector('#recs-list .card.hero');
+    if (fromMore) {
+      D.getElementById('overflow').open = true;
+      D.getElementById('recs-more').open = true;
+      const list = D.querySelectorAll('#more-list .card');
+      card = list[list.length - 1];
+    }
+    if (!card) throw new Error('no card to Mark done');
+    const id = card.dataset.id;
+    card.querySelector('.done-btn').click();
+    await settled();
+    const undo = D.getElementById('undo-btn');
+    if (!undo || undo.closest('[hidden]')) throw new Error('no Undo after Mark done');
+    undo.focus({ preventScroll: true }); // a real click focuses the button; .click() does not
+    const motion = await watch(() => undo.click());
+    const back = Array.from(D.querySelectorAll('#recs-list .card, #more-list .card')).find(c => c.dataset.id === id);
+    const btn = back ? back.querySelector('.done-btn') : null;
+    Object.assign(motion, {
+      action: fromMore ? 'Undo (More projects)' : 'Undo (hero)',
+      focus: btn && D.activeElement === btn ? 'mark-done' : focusDesc(),
+      focusOk: !!btn && D.activeElement === btn,
+      placeOk: inView(btn),
+      restTop: btn ? restingTop(back, 'nearest') : null
+    });
+    return Object.assign(motion, await tabCheck(btn));
+  }
+
   // A 'still' row: no jump during the click, no creep in the frames after, the position
   // holds, focus is on the target, and Tab goes on from there.
   function judgeStill(row) {
@@ -433,6 +480,31 @@
     row.ok = problems.length === 0;
     row.problems = problems;
     row.expect = 'still';
+    return row;
+  }
+
+  // A short scroll (under MIN_TRAVEL, too short for classify to tell smooth from instant): it
+  // settles and holds, rests where scrollIntoView alone puts it, the target has focus and is in
+  // view, and Tab goes on. With reduce it is one jump, no position in between; otherwise it
+  // walks there over frames. Not moving at all is fine too.
+  function judgeShort(row, expectKind) {
+    const problems = [];
+    const steps = row.uniq.length - 1;
+    if (!row.settled) problems.push('scroll did not settle before the frame cap');
+    if (row.travel >= MIN_TRAVEL) problems.push('travel ' + row.travel + 'px is not a short scroll');
+    if (expectKind === 'instant' && steps > 1) problems.push('not one jump: ' + row.uniq.join(' → '));
+    if (expectKind === 'smooth' && row.travel > 1 && steps < 3) problems.push('no frames in between: ' + row.uniq.join(' → '));
+    if (!row.focusOk) problems.push('focus ' + row.focus);
+    if (!row.placeOk) problems.push('target not fully in view');
+    if (!row.held) problems.push('moved after settling: ' + row.settledTop + ' → ' + row.heldTop + ' (focus yanked the page?)');
+    if (row.restTop == null || Math.abs(row.heldTop - row.restTop) > 2) {
+      problems.push('rests at ' + row.heldTop + ', scrollIntoView alone gives ' + row.restTop + ' (focus moved the page?)');
+    }
+    if (!row.tabOk) problems.push('Tab went to ' + row.tabActual + ', expected ' + row.tabExpected);
+    if (row.kind === 'too-short') row.kind = 'short';
+    row.ok = problems.length === 0;
+    row.problems = problems;
+    row.expect = 'short ' + expectKind;
     return row;
   }
 
@@ -467,6 +539,8 @@
     rows.push(judge(await runFillAgain(), expectKind));
     rows.push(judgeStill(await runNotThisOne(false)));
     rows.push(judgeStill(await runNotThisOne(true)));
+    rows.push(judgeShort(await runUndo(false), expectKind));
+    rows.push(judge(await runUndo(true), expectKind));
     // The emulated preference must reach both matchMedia and the CSS cascade:
     // css/style.css smooths html only for no-preference.
     const media = mediaNow();

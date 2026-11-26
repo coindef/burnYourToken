@@ -1144,7 +1144,7 @@
     const done = [];
     const rounds = [[30, 'large'], [60, 'medium'], [85, 'small'], [100, 'none']];
     for (const [used, band] of rounds) {
-      setVal('claude-s-pct', String(used));
+      fill('claude', { s: used, w: 40 }); // Fill again (below) empties the numbers: type them all
       calc();
       ok($('done-banner').hidden, band + '：重新算完，提示消失');
       eq(resultOf('claude').dataset.band, band, '这一轮的档位');
@@ -1166,6 +1166,8 @@
       ok(text($('done-banner')).indexOf('Marked done. Fill again after your next session.') !== -1, text($('done-banner')));
       eq($('recalc-btn').textContent.trim(), 'Fill again');
       eq(cards().length, 0, '重新算之前不推');
+      ok(!isShown($('calc-btn')), band + '：Get project hidden in the done state');
+      $('recalc-btn').click(); // the way on: Fill again, then the next round's numbers
     }
     eq(done.length, 3, '三轮各做完一个');
   });
@@ -1185,6 +1187,9 @@
         eq(moreCards().length, total - i - 1, '其余的在 More projects');
       }
       cards()[0].querySelector('.done-btn').click();
+      // Get project is hidden in the done state: Fill again, then the same numbers.
+      $('recalc-btn').click();
+      fill('claude', { s: 85, w: 30 });
       calc();
     }
     eq(cards().length, 0, '全做完了');
@@ -1207,6 +1212,7 @@
     ok(text($('done-banner')).indexOf('Fill again after your next session.') !== -1, '提示再 Fill 一次');
     eq(cards().length, 0, '重新算之前不推下一个');
     ok(!$('done-banner').hidden && !$('recs').hidden, 'Fill again banner visible');
+    ok(!isShown($('calc-btn')), 'Get project hidden while the banner is up: Fill again is the way on');
     ok($('stale-warn') && $('stale-warn').hidden, 'stale warning hidden while the banner is visible');
     // Stale but the banner is not on screen: the warning must still show.
     $('done-banner').hidden = true;
@@ -2264,6 +2270,7 @@
       ok(cards().length === 1 && isShown(btn) && !btn.hasAttribute('aria-disabled'), 'Get project again: a card, and Not this one works again');
       cards()[0].querySelector('.done-btn').click();
       ok(!isShown(btn), 'after Mark done: no Not this one');
+      $('recalc-btn').click(); // Get project is hidden in the done state: Fill again first
       fill('claude', { s: 100, w: 50 });
       calc();
       eq(resultOf('claude').dataset.band, 'none', 'nothing left');
@@ -2711,6 +2718,480 @@
     }
   });
 
+  // ---------------- Mark done: Get project hidden in the done state, Undo ----------------
+
+  const DONE_LINE = 'Marked done. Fill again after your next session.';
+  const undoBtn = () => $('undo-btn');
+  const doneBtnOf = c => c.querySelector('.done-btn');
+  const savedQp = () => JSON.parse(W.sessionStorage.getItem('qp-v0'));
+  const primaryIds = () => shownButtons().filter(b => b.classList.contains('primary')).map(b => b.id).join();
+
+  // Records window.confirm / alert / prompt in the app iframe instead of opening them. A confirm
+  // answers Cancel, so a Mark done or Undo waiting on one would not happen.
+  function noDialogs() {
+    const win = W;
+    const asked = [];
+    const real = {};
+    ['confirm', 'alert', 'prompt'].forEach(k => {
+      real[k] = win[k];
+      win[k] = function (message) {
+        asked.push(k + ': ' + message);
+        return k === 'confirm' ? false : null;
+      };
+    });
+    return { asked: asked, restore: () => Object.keys(real).forEach(k => { win[k] = real[k]; }) };
+  }
+
+  // A fake clock for Undo's timer only. While it holds, an app setTimeout with Undo's delay
+  // (QP.app.UNDO_MS) is kept here instead of running, and clearTimeout drops it; every other
+  // timer runs as usual. pending(): the delays still set. fire(): runs them, as if the time ran out.
+  function holdUndoTimer() {
+    const win = W;
+    const realSet = win.setTimeout;
+    const realClear = win.clearTimeout;
+    const held = new Map();
+    let lastId = 0;
+    win.setTimeout = function (fn, ms) {
+      if (ms !== win.QP.app.UNDO_MS) return realSet.apply(win, arguments);
+      lastId -= 1; // never a real timer id
+      held.set(lastId, { fn: fn, ms: ms });
+      return lastId;
+    };
+    win.clearTimeout = function (id) {
+      if (!held.delete(id)) realClear.apply(win, arguments);
+    };
+    return {
+      pending: () => Array.from(held.values()).map(t => t.ms),
+      fire: () => {
+        const due = Array.from(held.values());
+        held.clear();
+        due.forEach(t => t.fn());
+      },
+      restore: () => {
+        win.setTimeout = realSet;
+        win.clearTimeout = realClear;
+      }
+    };
+  }
+
+  test('Mark done on the hero: the banner says "Marked done. Fill again after your next session.", the card goes, focus moves to Fill again, the id is saved in qp-v0.done, nothing asks to confirm; Get project is hidden and out of the Tab order, so Fill again is the one action', async () => {
+    instantScroll(true);
+    const dialogs = noDialogs();
+    try {
+      const hero = await heroForCopy();
+      const id = hero.dataset.id;
+      ok(isShown($('calc-btn')), 'Get project is on screen while the card shows');
+      focusInApp($('calc-btn'));
+      eq(D.activeElement, $('calc-btn'), 'and takes focus then');
+      doneBtnOf(hero).click();
+      ok(isShown($('done-banner')), 'the banner is on screen');
+      eq(text($('done-line')).trim(), DONE_LINE, 'banner line');
+      eq($('recalc-btn').textContent.trim(), 'Fill again', 'Fill again label');
+      eq(cards().length + moreCards().length, 0, 'the card is gone');
+      eq(D.activeElement, $('recalc-btn'), 'focus on Fill again');
+      eq(savedQp().done.join(), id, 'the id is in qp-v0.done');
+      eq(dialogs.asked.length, 0, 'no confirm, alert or prompt: ' + dialogs.asked.join(' / '));
+      ok(!D.querySelector('dialog, [role="dialog"], [role="alertdialog"]'), 'no dialog on the page');
+      ok(!isShown($('calc-btn')), 'Get project is hidden');
+      eq(W.getComputedStyle($('calc-btn')).display, 'none', 'not rendered, so Tab never reaches it');
+      focusInApp($('calc-btn'));
+      eq(D.activeElement, $('recalc-btn'), 'Get project cannot take focus');
+      eq(primaryIds(), 'recalc-btn', 'Fill again is the only primary');
+    } finally {
+      dialogs.restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Done state: Enter in a step 1 field cannot run the hidden Get project (a browser still submits a form through a display:none submit button); the banner, the done record and focus stay', async () => {
+    instantScroll(true);
+    try {
+      const hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      const state = JSON.stringify(W.QP.app.state);
+      const saved = W.sessionStorage.getItem('qp-v0');
+      // A real Enter in a text field clicks the form's first submit button even while it is
+      // display:none (checked in Chrome 143 with Input.dispatchKeyEvent), so it arrives as this.
+      $('calc-form').requestSubmit($('calc-btn'));
+      calc(); // a script click on the hidden button is the same submit
+      ok(isShown($('done-banner')), 'the banner stays');
+      eq(cards().length, 0, 'no card');
+      eq(JSON.stringify(W.QP.app.state), state, 'Get project did not run');
+      eq(W.sessionStorage.getItem('qp-v0'), saved, 'nothing saved');
+      eq(D.activeElement, $('recalc-btn'), 'focus stays on Fill again');
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('Done state: Fill from Claude Usage does what Fill again does (the banner goes and the old numbers are cleared first), so after the read Get project is back, the one primary, with focus', async () => {
+    const usage = fixtureUsage();
+    instantScroll(true);
+    try {
+      const hero = await heroForCopy({ s: 30, w: 40 });
+      doneBtnOf(hero).click();
+      installUsageBridge(() => ({ ok: true, usage: usage }));
+      $('fill-usage-btn').click();
+      ok(!isShown($('done-banner')), 'the banner goes, as with Fill again');
+      ok(!W.QP.app.state.stale, 'the done state is over');
+      eq($('claude-s-pct').value, '', 'the old numbers are cleared first, as with Fill again');
+      ok(!isShown(undoBtn()), 'no Undo');
+      eq(W.QP.app.state.done.join(), hero.dataset.id, 'the done record stays for the next round');
+      await flushFill();
+      eq($('claude-s-pct').value, usage.sessionPct, 'then the numbers are read from Usage');
+      ok(isShown($('calc-btn')), 'Get project is back');
+      eq(primaryIds(), 'calc-btn', 'the one primary');
+      eq(D.activeElement, $('calc-btn'), 'focus on Get project');
+    } finally {
+      removeUsageBridge();
+      instantScroll(false);
+    }
+  });
+
+  test('Mark done while Fill is still reading Usage: the late reply is dropped, so it cannot write the numbers or hand the primary and focus to the hidden Get project', async () => {
+    const usage = fixtureUsage();
+    instantScroll(true);
+    let release = null;
+    try {
+      const hero = await heroForCopy({ s: 30, w: 40 });
+      installUsageBridge(() => new Promise(resolve => { release = resolve; }));
+      $('fill-usage-btn').click();
+      eq($('fill-status').textContent, FILL_WORKING, 'reading');
+      doneBtnOf(hero).click();
+      ok(!isShown($('fill-status')), 'Mark done drops the read: Reading Usage… is gone');
+      await wait(0);
+      ok(typeof release === 'function', 'the bridge got the request');
+      release({ ok: true, usage: usage });
+      await flushFill();
+      eq($('claude-s-pct').value, '30', 'the late reply wrote nothing');
+      ok(!isShown($('fill-status')), 'and said nothing');
+      ok(isShown($('done-banner')), 'the banner stays');
+      eq(primaryIds(), 'recalc-btn', 'Fill again is still the one primary');
+      eq(D.activeElement, $('recalc-btn'), 'focus stays on Fill again');
+    } finally {
+      removeUsageBridge();
+      instantScroll(false);
+    }
+  });
+
+  test('Refresh in the done state: the banner stays, Fill again is the sole primary, the done id is kept, no Undo; Get project stays hidden and so does "Fields restored. Get project to see it again."; Enter still cannot run Get project', async () => {
+    const hero = await heroForCopy();
+    const id = hero.dataset.id;
+    doneBtnOf(hero).click();
+    await reloadApp();
+    ok(isShown($('done-banner')), 'the banner persists');
+    eq(text($('done-line')).trim(), DONE_LINE, 'same line');
+    eq(primaryIds(), 'recalc-btn', 'Fill again is the sole primary');
+    eq(W.QP.app.state.done.join(), id, 'the done id is kept');
+    eq(savedQp().done.join(), id, 'and still saved');
+    eq(cards().length, 0, 'no old card');
+    ok(!isShown(undoBtn()), 'no Undo after a refresh');
+    ok(!shownButtons().some(b => b.textContent.trim() === 'Undo'), 'no Undo button anywhere');
+    ok(!isShown($('calc-btn')), 'Get project is still hidden');
+    ok(isShown($('claude-plan')) && $('claude-plan').value !== '', 'the restored plan is on screen');
+    ok(!isShown($('restore-note')), 'the Fields restored note stays hidden: it points at Get project');
+    $('calc-form').requestSubmit($('calc-btn'));
+    ok(isShown($('done-banner')) && cards().length === 0, 'Enter in a field still cannot run Get project');
+  });
+
+  test('Fill again, then Get project: the finished project is gone from the hero and More projects and "Finished 1 this round" shows; Get project is hidden only while the banner is up', async () => {
+    const o = { s: 30, w: 40 }; // the same numbers again: only the done record keeps it out
+    const hero = await heroForCopy(o);
+    const id = hero.dataset.id;
+    doneBtnOf(hero).click();
+    ok(!isShown($('calc-btn')), 'Get project hidden while the banner is up');
+    $('recalc-btn').click();
+    ok(!isShown($('done-banner')) && !isShown(undoBtn()), 'Fill again: no banner, no Undo');
+    fill('claude', o);
+    calc();
+    eq(cards().length, 1, 'a hero again');
+    ok(cards().concat(moreCards()).every(c => c.dataset.id !== id), 'the finished project is absent');
+    ok(statusText().indexOf('Finished 1 this round') !== -1, 'Finished 1 this round: ' + statusText());
+    ok(isShown($('calc-btn')), 'Get project is on screen again with the card');
+    ok(!isShown(undoBtn()), 'still no Undo');
+  });
+
+  test('Undo (hero): a secondary Undo button in the banner right after Mark done; it brings the same card back as the hero, collapses the banner, takes the id out of qp-v0.done and the title out of doneTitles, and moves focus to that card’s Mark done; the page is as it was before Mark done; no confirm, and nothing said in #pick-live', async () => {
+    instantScroll(true);
+    const dialogs = noDialogs();
+    let pickLive = null;
+    try {
+      const hero = await heroForCopy();
+      const id = hero.dataset.id;
+      const title = titleOf(hero);
+      const before = {
+        state: JSON.stringify(W.QP.app.state),
+        saved: W.sessionStorage.getItem('qp-v0'),
+        primary: primaryIds(),
+        more: moreCards().map(c => c.dataset.id).join()
+      };
+      pickLive = watchText($('pick-live'));
+      doneBtnOf(hero).click();
+      const undo = undoBtn();
+      ok(undo && isShown(undo), 'Undo is on screen right after Mark done');
+      eq(undo.textContent.trim(), 'Undo', 'labeled exactly Undo');
+      ok($('done-banner').contains(undo), 'inside #done-banner');
+      eq($('done-banner').getAttribute('role'), 'status', 'the banner stays the one announcement');
+      ok(undo.tagName === 'BUTTON' && undo.type === 'button', 'a native button that does not submit');
+      ok(undo.classList.contains('secondary') && !undo.classList.contains('primary'), 'secondary: ' + undo.className);
+      eq(primaryIds(), 'recalc-btn', 'Fill again stays the one primary');
+      eq(text($('done-line')).trim(), DONE_LINE, 'the banner line is unchanged');
+      eq(savedQp().done.join(), id, 'done before Undo');
+      eq(savedQp().doneTitles.join(), title, 'title saved before Undo');
+
+      undo.click();
+      ok(!isShown($('done-banner')), 'the banner collapses');
+      ok(!isShown(undo), 'Undo goes with it');
+      eq(cards().length, 1, 'one card');
+      eq(cards()[0].dataset.id, id, 'the same card is back as the hero');
+      eq(D.activeElement, doneBtnOf(cards()[0]), 'focus on its Mark done');
+      ok(inViewport(doneBtnOf(cards()[0])), 'its Mark done is in view');
+      eq(savedQp().done.indexOf(id), -1, 'the id is out of qp-v0.done');
+      eq(savedQp().doneTitles.indexOf(title), -1, 'the title is out of doneTitles');
+      ok(!W.QP.app.state.stale && W.QP.app.state.lastDone === '', 'the done state is undone: not stale, no lastDone');
+      eq(JSON.stringify(W.QP.app.state), before.state, 'app state as before Mark done');
+      eq(W.sessionStorage.getItem('qp-v0'), before.saved, 'saved state as before Mark done');
+      eq(primaryIds(), before.primary, 'the same primary as before Mark done');
+      ok(isShown($('calc-btn')), 'Get project is back');
+      ok(isShown(notBtn()), 'Not this one is back');
+      eq(moreCards().map(c => c.dataset.id).join(), before.more, 'More projects as before');
+      eq(dialogs.asked.length, 0, 'no confirm: ' + dialogs.asked.join(' / '));
+      await wait(150); // a say() would land 100ms later
+      eq(pickLive.seen.filter(t => t.trim()).length, 0, '#pick-live said nothing: ' + JSON.stringify(pickLive.seen));
+    } finally {
+      if (pickLive) pickLive.stop();
+      dialogs.restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Undo goes when its time is up (QP.app.expireUndo runs what the timer runs): the banner, its line and Fill again stay, focus stays, the project stays done, and a click on the hidden Undo does nothing; Undo is never offered after a refresh or after Fill again, and the next Mark done offers it again', async () => {
+    instantScroll(true);
+    try {
+      ok(typeof W.QP.app.expireUndo === 'function', 'QP.app.expireUndo is there');
+      let hero = await heroForCopy();
+      const id = hero.dataset.id;
+      doneBtnOf(hero).click();
+      ok(isShown(undoBtn()), 'Undo right after Mark done');
+      W.QP.app.expireUndo();
+      ok(!isShown(undoBtn()), 'Undo is gone once its time is up');
+      ok(isShown($('done-banner')) && isShown($('recalc-btn')), 'the banner and Fill again stay');
+      eq(text($('done-line')).trim(), DONE_LINE, 'with the same line');
+      eq(D.activeElement, $('recalc-btn'), 'focus stays on Fill again');
+      const state = JSON.stringify(W.QP.app.state);
+      undoBtn().click();
+      eq(JSON.stringify(W.QP.app.state), state, 'a click on the hidden Undo changes nothing');
+      eq(savedQp().done.join(), id, 'the project stays done');
+
+      await reloadApp();
+      ok(isShown($('done-banner')) && !isShown(undoBtn()), 'after a refresh: the banner, no Undo');
+      $('recalc-btn').click();
+      ok(!isShown(undoBtn()), 'after Fill again: no Undo');
+      fill('claude', { s: 72, h: 3, m: 12, w: 31 });
+      calc();
+      ok(!isShown($('done-banner')) && !isShown(undoBtn()), 'after Get project: no banner, no Undo');
+
+      hero = cards()[0];
+      doneBtnOf(hero).click();
+      ok(isShown(undoBtn()), 'the next Mark done offers Undo again');
+      $('recalc-btn').click();
+      ok(!isShown(undoBtn()), 'and Fill again takes it away');
+      eq(W.QP.app.state.done.length, 2, 'both projects stay done');
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('Undo’s timer: UNDO_MS is 8000 (about 8 seconds) and is read at each Mark done; at 0 the real timer takes Undo away with no 8s wait; Fill again, Clear and pagehide clear the timer; if Undo has focus when the time is up, focus moves to Fill again, not to the page', async () => {
+    eq(W.QP.app.UNDO_MS, 8000, 'about 8 seconds by default');
+    instantScroll(true);
+    let clock = null;
+    try {
+      // The real timer, set to 0ms: Undo is gone once the timer has had its turn.
+      W.QP.app.UNDO_MS = 0;
+      let hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      ok(isShown(undoBtn()), 'Undo is on screen until the timer runs');
+      await flushFill();
+      ok(!isShown(undoBtn()), 'the 0ms timer took Undo away');
+      ok(isShown($('done-banner')), 'the banner stays');
+      W.QP.app.UNDO_MS = 8000;
+
+      // A held timer: one 8000ms timer per Mark done, and each way out clears it.
+      clock = holdUndoTimer();
+      hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      eq(clock.pending().join(), '8000', 'Mark done sets one 8s timer');
+      $('recalc-btn').click();
+      eq(clock.pending().length, 0, 'Fill again clears it');
+
+      hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      eq(clock.pending().length, 1, 'set again');
+      $('clear-btn').click();
+      eq(clock.pending().length, 0, 'Clear clears it');
+      ok(!isShown(undoBtn()), 'and Undo is gone');
+
+      hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      eq(clock.pending().length, 1, 'set again');
+      $('example-btn').click();
+      ok(!isShown($('done-banner')), 'Try sample ends the done state too');
+      eq(clock.pending().length, 0, 'so it clears the timer as well');
+      eq(undoBtn().hidden, true, 'and the Undo offer is withdrawn, not just folded away with the banner');
+
+      hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      eq(clock.pending().length, 1, 'set again');
+      W.dispatchEvent(new W.Event('pagehide'));
+      eq(clock.pending().length, 0, 'pagehide (the tab leaving the page) clears it');
+      ok(!isShown(undoBtn()), 'and takes Undo away, so a page shown again from the back/forward cache does not offer it');
+      ok(isShown($('done-banner')), 'the banner stays: the done state is saved');
+
+      // Time up while Undo has focus: focus must not drop to the page.
+      hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      focusInApp(undoBtn());
+      eq(D.activeElement, undoBtn(), 'Undo has focus');
+      clock.fire();
+      ok(!isShown(undoBtn()), 'time up: Undo is gone');
+      eq(D.activeElement, $('recalc-btn'), 'focus moves to Fill again');
+    } finally {
+      if (clock) clock.restore();
+      W.QP.app.UNDO_MS = 8000;
+      instantScroll(false);
+    }
+  });
+
+  test('Undo (More projects): Mark done on a More projects card saves its id; Undo puts that card back under More projects in its place (the hero unchanged), opens More projects if it was folded, and moves focus to its Mark done; marked done again, it is absent after Fill again and Get project', async () => {
+    instantScroll(true);
+    try {
+      const hero = await heroForCopy({ s: 30, w: 40 }); // Large: More projects lists the other Large picks and smaller ones
+      const heroId = hero.dataset.id;
+      // Open More and More projects, the way a person reaches the list.
+      $('overflow').open = true;
+      $('recs-more').open = true;
+      const order = moreCards().map(c => c.dataset.id).join();
+      const more = moreCards()[1];
+      ok(more && isShown(doneBtnOf(more)), 'a More projects card with its Mark done on screen');
+      const id = more.dataset.id;
+      const title = titleOf(more);
+      doneBtnOf(more).click();
+      eq(savedQp().done.join(), id, 'its id is in qp-v0.done');
+      eq(savedQp().doneTitles.join(), title, 'with its title');
+      eq(cards().length + moreCards().length, 0, 'no cards in the done state');
+      ok(isShown($('done-banner')) && isShown(undoBtn()), 'the banner, with Undo');
+      // Fold More while the banner is up: Undo has to open it again to reach the card.
+      $('overflow').open = false;
+      $('recs-more').open = false;
+      undoBtn().click();
+      ok(!isShown($('done-banner')), 'the banner collapses');
+      eq(cards().length, 1, 'one hero');
+      eq(cards()[0].dataset.id, heroId, 'the hero is unchanged');
+      eq(moreCards().map(c => c.dataset.id).join(), order, 'the card is back under More projects, in its place');
+      ok($('overflow').open && $('recs-more').open, 'More projects is open again, so its Mark done can take focus');
+      const back = moreCards().find(c => c.dataset.id === id);
+      eq(D.activeElement, doneBtnOf(back), 'focus on its Mark done');
+      ok(isShown(doneBtnOf(back)) && inViewport(doneBtnOf(back)), 'and it is on screen');
+      eq(savedQp().done.indexOf(id), -1, 'the id is out of qp-v0.done');
+      eq(savedQp().doneTitles.indexOf(title), -1, 'the title is out of doneTitles');
+
+      // Marked done again, it stays out of the next round.
+      doneBtnOf(back).click();
+      eq(savedQp().done.join(), id, 'done again');
+      $('recalc-btn').click();
+      fill('claude', { s: 30, w: 40 });
+      calc();
+      ok(cards().length === 1 && moreCards().length > 0, 'a hero and More projects');
+      ok(cards().concat(moreCards()).every(c => c.dataset.id !== id), 'absent from the hero and More projects next round');
+      ok(statusText().indexOf('Finished 1 this round') !== -1, 'Finished 1 this round: ' + statusText());
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('Undo after the answers changed under the banner: if the undone card is no longer drawn (the wish it was built from was rewritten), focus goes to the recommendations heading instead of dropping to the page', async () => {
+    instantScroll(true);
+    try {
+      await fresh();
+      setVal('q-wish', 'xyzzy plugh');
+      fill('claude', { s: 30, w: 40 });
+      calc();
+      const hero = cards()[0];
+      const id = hero.dataset.id;
+      ok(id.indexOf('custom:') === 0, 'the card built from the wish is the hero: ' + id);
+      doneBtnOf(hero).click();
+      setVal('q-wish', 'plugh xyzzy');
+      ok(isShown(undoBtn()), 'Undo still offered after a quiz edit');
+      undoBtn().click();
+      ok(!isShown($('done-banner')), 'the banner collapses');
+      ok(cards().concat(moreCards()).every(c => c.dataset.id !== id), 'the old wish card is not drawn');
+      eq(W.QP.app.state.done.indexOf(id), -1, 'and not done');
+      eq(D.activeElement, $('recs-title'), 'focus on the recommendations heading');
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('Done banner layout at 320, 375 and 1280: Fill again, then Undo, on one row inside the banner, 10px apart like the card buttons (Fill again’s focus ring, 3px plus a 2px offset, stays clear of Undo), the same height and at least 44px tall; the line sits as far below the top edge as the buttons sit above the bottom edge', async () => {
+    instantScroll(true);
+    try {
+      for (const width of [320, 375, 1280]) {
+        frame.style.width = width + 'px';
+        await wait(80);
+        const hero = await heroForCopy();
+        doneBtnOf(hero).click();
+        const box = $('done-banner').getBoundingClientRect();
+        const line = $('done-line').getBoundingClientRect();
+        const again = $('recalc-btn').getBoundingClientRect();
+        const undo = undoBtn().getBoundingClientRect();
+        const pad = parseFloat(W.getComputedStyle($('done-banner')).paddingRight);
+        ok(Math.abs(again.top - undo.top) < 1, width + ': one row (' + again.top + ' / ' + undo.top + ')');
+        eq(Math.round(undo.left - again.right), 10, width + ': Undo 10px after Fill again');
+        ok(undo.right <= box.right - pad + 0.5, width + ': Undo inside the banner padding');
+        ok(again.height >= 44 && Math.abs(again.height - undo.height) < 1, width + ': button heights ' + again.height + ' / ' + undo.height);
+        const above = line.top - box.top;
+        const below = box.bottom - Math.max(again.bottom, undo.bottom);
+        ok(Math.abs(above - below) <= 1, width + ': line ' + above.toFixed(1) + 'px from the top, buttons ' + below.toFixed(1) + 'px from the bottom');
+      }
+    } finally {
+      frame.style.width = '';
+      instantScroll(false);
+    }
+  });
+
+  test('Reduced motion: Undo brings the card back into view with behavior auto, otherwise smooth, only as far as it must (block nearest), then focuses its Mark done without scrolling, for the hero and for a More projects card (matchMedia mocked)', async () => {
+    for (const reduce of [false, true]) {
+      const want = reduce ? 'auto' : 'smooth';
+      const tag = (reduce ? 'reduce' : 'no-preference') + ' ';
+      await fresh();
+      const restoreMotion = mockReducedMotion(() => reduce);
+      const spy = spyScrollFocus();
+      try {
+        fill('claude', { s: 30, w: 40 });
+        calc();
+        doneBtnOf(cards()[0]).click();
+        ok(isShown(undoBtn()), tag + 'Undo offered');
+        let from = spy.log.length;
+        undoBtn().click();
+        const hero = cards()[0];
+        expectScrollThenFocus(spy.since(from), want, [[hero, 'nearest', doneBtnOf(hero)]], tag + 'Undo (hero)');
+
+        $('overflow').open = true;
+        $('recs-more').open = true;
+        const id = moreCards()[0].dataset.id;
+        doneBtnOf(moreCards()[0]).click();
+        from = spy.log.length;
+        undoBtn().click();
+        const back = moreCards().find(c => c.dataset.id === id);
+        expectScrollThenFocus(spy.since(from), want, [[back, 'nearest', doneBtnOf(back)]], tag + 'Undo (More projects)');
+      } finally {
+        spy.restore();
+        restoreMotion();
+      }
+    }
+  });
+
   // 「真发一个请求看会不会被拦下」放在 tests/probe.html 里单独跑：被拦下时浏览器一定会在控制台打一条提示，
   // 放在这里会让这套测试的控制台不干净。
   test('不联网：整个流程走完，只加载过本地的 css/js，页面里没有外部地址，也没有表单能提交出去', async () => {
@@ -3053,6 +3534,9 @@
         calc();
         for (let i = 0; i < 30 && cards().length; i++) {
           cards()[0].querySelector('.done-btn').click();
+          // Get project is hidden in the done state: Fill again, then the same numbers.
+          $('recalc-btn').click();
+          fill('claude', { s: 85, w: 30 });
           calc();
         }
       });
