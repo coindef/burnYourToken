@@ -2745,23 +2745,30 @@
   // A fake clock for Undo's timer only. While it holds, an app setTimeout with Undo's delay
   // (QP.app.UNDO_MS) is kept here instead of running, and clearTimeout drops it; every other
   // timer runs as usual. pending(): the delays still set. fire(): runs them, as if the time ran out.
+  // sets() / cleared(): how many Undo timers were set, and how many of those clearTimeout dropped.
   function holdUndoTimer() {
     const win = W;
     const realSet = win.setTimeout;
     const realClear = win.clearTimeout;
     const held = new Map();
     let lastId = 0;
+    let sets = 0;
+    let cleared = 0;
     win.setTimeout = function (fn, ms) {
       if (ms !== win.QP.app.UNDO_MS) return realSet.apply(win, arguments);
       lastId -= 1; // never a real timer id
+      sets += 1;
       held.set(lastId, { fn: fn, ms: ms });
       return lastId;
     };
     win.clearTimeout = function (id) {
-      if (!held.delete(id)) realClear.apply(win, arguments);
+      if (held.delete(id)) cleared += 1;
+      else realClear.apply(win, arguments);
     };
     return {
       pending: () => Array.from(held.values()).map(t => t.ms),
+      sets: () => sets,
+      cleared: () => cleared,
       fire: () => {
         const due = Array.from(held.values());
         held.clear();
@@ -2772,6 +2779,20 @@
         win.clearTimeout = realClear;
       }
     };
+  }
+
+  // The pointer moving onto or off the done banner. These checks cannot move a real pointer, so
+  // they send what the browser sends then (mouseenter and mouseleave do not bubble).
+  function pointerOnBanner(on) {
+    $('done-banner').dispatchEvent(new W.MouseEvent(on ? 'mouseenter' : 'mouseleave'));
+  }
+
+  // Move focus out of the done banner onto a visible step 1 field, and send mouseleave, so
+  // a paused Undo timer can start a fresh window. Do not use this to mean the tab itself
+  // blurred: Fill again can stay document.activeElement then, and the banner still holds focus.
+  function leaveDoneBanner() {
+    pointerOnBanner(false);
+    focusInApp($('claude-plan'));
   }
 
   test('Mark done on the hero: the banner says "Marked done. Fill again after your next session.", the card goes, focus moves to Fill again, the id is saved in qp-v0.done, nothing asks to confirm; Get project is hidden and out of the Tab order, so Fill again is the one action', async () => {
@@ -2799,6 +2820,131 @@
       eq(primaryIds(), 'recalc-btn', 'Fill again is the only primary');
     } finally {
       dialogs.restore();
+      instantScroll(false);
+    }
+  });
+
+  test('Mark done is announced as its line alone: role="status" is on #done-line, not on #done-banner, so a screen reader hears "Marked done. Fill again after your next session." without the Fill again and Undo button names', async () => {
+    instantScroll(true);
+    try {
+      const hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      ok(isShown($('recalc-btn')) && isShown(undoBtn()), 'Fill again and Undo are both in the banner');
+      eq($('done-line').getAttribute('role'), 'status', '#done-line is the status region');
+      eq($('done-banner').getAttribute('role'), null, '#done-banner has no role');
+      const LIVE = '[role="status"], [role="alert"], [role="log"], [aria-live]:not([aria-live="off"])';
+      eq($('done-line').parentElement.closest(LIVE), null, 'no live region around the line');
+      eq($('recalc-btn').closest(LIVE), null, 'Fill again is in no live region');
+      eq(undoBtn().closest(LIVE), null, 'Undo is in no live region');
+      eq(text($('done-line')).trim(), DONE_LINE, 'what the region says: the line, unchanged');
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('Done state: the hidden Get project leaves no gap; its row (.calc-actions) takes no space, so step 1 ends at the Claude usage fieldset, not 16px below it; after Fill again Get project is back 16px under the fieldset', async () => {
+    const usage = fixtureUsage();
+    instantScroll(true);
+    try {
+      const hero = await heroForCopy();
+      const fieldsetBottom = () => $('svc-claude').getBoundingClientRect().bottom;
+      const getProjectGap = () => $('calc-btn').getBoundingClientRect().top - fieldsetBottom();
+      eq(Math.round(getProjectGap()), 16, 'with the card: Get project 16px under the fieldset');
+      doneBtnOf(hero).click();
+      ok(isShown($('svc-claude')) && !isShown($('calc-btn')), 'done state: the fields show, Get project is hidden');
+      eq(Math.round($('usage-fields').getBoundingClientRect().bottom - fieldsetBottom()), 0, 'done state: nothing under the fieldset takes space');
+      installUsageBridge(() => ({ ok: true, usage: usage }));
+      $('recalc-btn').click();
+      await flushFill();
+      ok(isShown($('calc-btn')), 'Fill again read Usage: Get project is back');
+      eq(Math.round(getProjectGap()), 16, 'the normal 16px under the fieldset again');
+      eq(Math.round($('usage-fields').getBoundingClientRect().bottom - $('calc-btn').getBoundingClientRect().bottom), 0, 'and step 1 ends at the button');
+    } finally {
+      removeUsageBridge();
+      instantScroll(false);
+    }
+  });
+
+  test('Undo timer pauses while the done banner is hovered or focused, then starts a fresh window on leave (WCAG 2.2.1): firing the original window does not take Undo away; moving from Fill again to Undo inside the banner does not start one; leaving starts a new UNDO_MS window, and firing that takes Undo away', async () => {
+    instantScroll(true);
+    let clock = null;
+    try {
+      clock = holdUndoTimer();
+      const hero = await heroForCopy();
+      doneBtnOf(hero).click();
+      eq(D.activeElement, $('recalc-btn'), 'Mark done focuses Fill again, inside the banner');
+      eq(clock.pending().length, 0, 'the timer is paused while the banner holds focus');
+      clock.fire();
+      ok(isShown(undoBtn()), 'firing a paused clock leaves Undo in place');
+
+      focusInApp(undoBtn());
+      eq(D.activeElement, undoBtn(), 'Tab to Undo, still in the banner');
+      eq(clock.pending().length, 0, 'still paused');
+      clock.fire();
+      ok(isShown(undoBtn()), 'moving to Undo inside the banner does not start or fire a window');
+
+      pointerOnBanner(true);
+      eq(clock.pending().length, 0, 'hover, still paused');
+      pointerOnBanner(false);
+      eq(clock.pending().length, 0, 'mouseleave while focus stays in the banner does not start a timer');
+
+      leaveDoneBanner();
+      eq(clock.pending().join(), '8000', 'leaving the banner starts a fresh UNDO_MS window');
+      ok(isShown(undoBtn()), 'Undo stays during that window');
+
+      pointerOnBanner(true);
+      eq(clock.pending().length, 0, 'hovering the banner pauses the fresh window');
+      clock.fire();
+      ok(isShown(undoBtn()), 'firing while hovered leaves Undo in place');
+      pointerOnBanner(false);
+      eq(clock.pending().join(), '8000', 'mouseleave starts another fresh window');
+      clock.fire();
+      ok(!isShown(undoBtn()), 'that window ending takes Undo away');
+      ok(isShown($('done-banner')), 'the banner stays');
+    } finally {
+      if (clock) clock.restore();
+      instantScroll(false);
+    }
+  });
+
+  test('calculate() itself refuses to run in the done state: QP.app.calculate() leaves the banner up, Get project hidden, the done id in qp-v0.done, and no new recommendation from the old numbers', async () => {
+    instantScroll(true);
+    try {
+      const hero = await heroForCopy();
+      const id = hero.dataset.id;
+      doneBtnOf(hero).click();
+      ok(isShown($('done-banner')) && !isShown($('calc-btn')) && cards().length === 0, 'in the done state');
+      W.QP.app.calculate();
+      ok(isShown($('done-banner')), 'the banner stays');
+      ok(!isShown($('calc-btn')), 'Get project stays hidden');
+      eq(savedQp().done.join(), id, 'the done id is still in qp-v0.done');
+      eq(cards().length, 0, 'no new recommendation from the old numbers');
+      ok(W.QP.app.state.stale, 'still stale');
+    } finally {
+      instantScroll(false);
+    }
+  });
+
+  test('markDone clears any existing Undo timer before starting a new one: a second Mark done while a window is held leaves no leftover timer', async () => {
+    instantScroll(true);
+    let clock = null;
+    try {
+      clock = holdUndoTimer();
+      const hero = await heroForCopy();
+      const p = { id: hero.dataset.id, title: titleOf(hero) };
+      doneBtnOf(hero).click();
+      leaveDoneBanner();
+      eq(clock.pending().length, 1, 'one timer is running after leaving the banner');
+      ok(typeof W.QP.app.markDone === 'function', 'QP.app.markDone is there so a second call can run while the banner is still up');
+      W.QP.app.markDone(p);
+      eq(D.activeElement, $('recalc-btn'), 'the second Mark done focuses Fill again again');
+      eq(clock.pending().length, 0, 'the earlier timer was cleared, not left armed while the banner holds focus');
+      leaveDoneBanner();
+      eq(clock.pending().length, 1, 'only one fresh timer after leaving');
+      clock.fire();
+      ok(!isShown(undoBtn()), 'that one timer ending takes Undo away');
+    } finally {
+      if (clock) clock.restore();
       instantScroll(false);
     }
   });
@@ -2931,7 +3077,8 @@
       ok(undo && isShown(undo), 'Undo is on screen right after Mark done');
       eq(undo.textContent.trim(), 'Undo', 'labeled exactly Undo');
       ok($('done-banner').contains(undo), 'inside #done-banner');
-      eq($('done-banner').getAttribute('role'), 'status', 'the banner stays the one announcement');
+      eq($('done-line').getAttribute('role'), 'status', 'the banner’s line stays the one announcement');
+      eq($('done-banner').getAttribute('role'), null, 'the line, not the whole banner, so Undo’s name is not in it');
       ok(undo.tagName === 'BUTTON' && undo.type === 'button', 'a native button that does not submit');
       ok(undo.classList.contains('secondary') && !undo.classList.contains('primary'), 'secondary: ' + undo.className);
       eq(primaryIds(), 'recalc-btn', 'Fill again stays the one primary');
@@ -3007,26 +3154,31 @@
     instantScroll(true);
     let clock = null;
     try {
-      // The real timer, set to 0ms: Undo is gone once the timer has had its turn.
+      // The real timer, set to 0ms, after leaving the banner (the timer is paused while Fill
+      // again still has focus): Undo is gone once the timer has had its turn.
       W.QP.app.UNDO_MS = 0;
       let hero = await heroForCopy();
       doneBtnOf(hero).click();
-      ok(isShown(undoBtn()), 'Undo is on screen until the timer runs');
+      ok(isShown(undoBtn()), 'Undo is on screen while the banner holds focus');
+      leaveDoneBanner();
       await flushFill();
-      ok(!isShown(undoBtn()), 'the 0ms timer took Undo away');
+      ok(!isShown(undoBtn()), 'the 0ms timer took Undo away after leaving the banner');
       ok(isShown($('done-banner')), 'the banner stays');
       W.QP.app.UNDO_MS = 8000;
 
-      // A held timer: one 8000ms timer per Mark done, and each way out clears it.
+      // A held timer: leaving the banner starts one 8000ms window, and each way out clears it.
       clock = holdUndoTimer();
       hero = await heroForCopy();
       doneBtnOf(hero).click();
-      eq(clock.pending().join(), '8000', 'Mark done sets one 8s timer');
+      eq(clock.pending().length, 0, 'paused while Fill again has focus');
+      leaveDoneBanner();
+      eq(clock.pending().join(), '8000', 'leaving the banner starts one 8s timer');
       $('recalc-btn').click();
       eq(clock.pending().length, 0, 'Fill again clears it');
 
       hero = await heroForCopy();
       doneBtnOf(hero).click();
+      leaveDoneBanner();
       eq(clock.pending().length, 1, 'set again');
       $('clear-btn').click();
       eq(clock.pending().length, 0, 'Clear clears it');
@@ -3034,6 +3186,7 @@
 
       hero = await heroForCopy();
       doneBtnOf(hero).click();
+      leaveDoneBanner();
       eq(clock.pending().length, 1, 'set again');
       $('example-btn').click();
       ok(!isShown($('done-banner')), 'Try sample ends the done state too');
@@ -3042,20 +3195,24 @@
 
       hero = await heroForCopy();
       doneBtnOf(hero).click();
+      leaveDoneBanner();
       eq(clock.pending().length, 1, 'set again');
       W.dispatchEvent(new W.Event('pagehide'));
       eq(clock.pending().length, 0, 'pagehide (the tab leaving the page) clears it');
       ok(!isShown(undoBtn()), 'and takes Undo away, so a page shown again from the back/forward cache does not offer it');
       ok(isShown($('done-banner')), 'the banner stays: the done state is saved');
 
-      // Time up while Undo has focus: focus must not drop to the page.
+      // expireUndo() while Undo has focus: focus must not drop to the page.
       hero = await heroForCopy();
       doneBtnOf(hero).click();
       focusInApp(undoBtn());
       eq(D.activeElement, undoBtn(), 'Undo has focus');
+      eq(clock.pending().length, 0, 'the timer stays paused while Undo has focus');
       clock.fire();
-      ok(!isShown(undoBtn()), 'time up: Undo is gone');
-      eq(D.activeElement, $('recalc-btn'), 'focus moves to Fill again');
+      ok(isShown(undoBtn()), 'firing a paused clock leaves Undo in place');
+      W.QP.app.expireUndo();
+      ok(!isShown(undoBtn()), 'expireUndo still takes Undo away');
+      eq(D.activeElement, $('recalc-btn'), 'and moves focus to Fill again');
     } finally {
       if (clock) clock.restore();
       W.QP.app.UNDO_MS = 8000;
