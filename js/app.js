@@ -765,9 +765,17 @@
     state.stale = true;
     state.filled = false;
     setPrimary('again');
+    // Empty the line before the banner is shown, then write the same sentence after it is
+    // visible, so a screen reader that only reacts to text changes hears it once. Clearing
+    // first means unhiding does not already present the sentence. dropUndo and expireUndo
+    // do not touch the line, so Undo disappearing does not re-announce it.
+    const line = $('done-line');
+    if (doneLineText == null) doneLineText = line.textContent;
+    line.textContent = '';
     save();
     renderResults();
     renderRecs();
+    line.textContent = doneLineText;
     $('undo-btn').hidden = false;
     armUndoTimer(); // clears any leftover timer first, then starts one unless the banner holds focus
     scrollToTarget($('recs'), 'start', $('recalc-btn'));
@@ -781,6 +789,7 @@
   let undo = null; // what Mark done changed, so Undo can put it back
   let undoTimer = 0;
   let undoPointerInBanner = false; // mouseenter/leave on #done-banner; :hover is not enough for tests
+  let doneLineText = null; // the #done-line sentence from the HTML, captured once, never a new string
 
   function bannerHoldsUndo() {
     if (!undo || $('undo-btn').hidden) return false;
