@@ -207,7 +207,7 @@
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
   const FILL_AGAIN = 'Updated from Usage.';
-  const FILL_NO_EXT = 'No extension? No problem. Type your numbers below, or install it in 30 seconds.';
+  const FILL_NO_EXT = 'No extension here. Type Session, Resets in, and Weekly below, or install the extension.';
   const FILL_PARSE = 'Couldn’t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
 
   function removeUsageBridge() {
@@ -621,8 +621,10 @@
     eq($('fill-status').textContent, FILL_NO_EXT, 'no extension');
     const links = Array.from($('fill-status').querySelectorAll('a'));
     ok(!links.some(a => a.getAttribute('href') === '#usage-fields'), 'no redundant link to the already-focused fields');
-    const readme = links.find(a => a.getAttribute('href') === 'README.md#load-unpacked-30-seconds');
-    ok(readme && readme.textContent === 'install it in 30 seconds', 'links to README install');
+    eq(links.length, 1, 'only one link in the no-extension status');
+    eq(links[0].textContent, 'install the extension', 'link text');
+    eq(links[0].getAttribute('href'), '#load-extension', 'in-page install hash');
+    ok(links[0].getAttribute('href').indexOf('README') === -1, 'does not point at the README');
     ok($('fill-status').classList.contains('info'), 'no extension reads as a hint, not an error');
     eq($('claude-s-pct').value, '', 'still empty');
     eq(text($('calc-results')).trim(), '', 'no extension does not calculate');
@@ -1236,6 +1238,127 @@
     ok(cards().length > 0, '推了下一批');
     ok(cards().every(c => c.dataset.id !== doneId && c.dataset.band === 'medium'), '没有做完的，档位跟着新剩余');
     ok(statusText().indexOf('Finished 1 this round') !== -1, '记着做完了几个');
+  });
+
+  function midWordBreaks(el) {
+    const breaks = [];
+    const walker = D.createTreeWalker(el, W.NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const value = node.nodeValue;
+      for (let i = 1; i < value.length; i++) {
+        if (/\s/.test(value[i]) || /\s/.test(value[i - 1])) continue;
+        const a = D.createRange();
+        a.setStart(node, i - 1);
+        a.setEnd(node, i);
+        const b = D.createRange();
+        b.setStart(node, i);
+        b.setEnd(node, i + 1);
+        const ra = a.getBoundingClientRect();
+        const rb = b.getBoundingClientRect();
+        if (Math.abs(ra.top - rb.top) > 1) breaks.push(value.slice(Math.max(0, i - 4), i + 4));
+      }
+    }
+    return breaks;
+  }
+
+  test('No-extension install link opens the in-page Load unpacked steps and never opens Markdown', async () => {
+    await fresh();
+    await reloadApp();
+    removeUsageBridge();
+    $('fill-usage-btn').click();
+    eq($('fill-status').textContent, FILL_WORKING, 'working');
+    await wait(1700);
+    eq($('fill-status').textContent, FILL_NO_EXT, 'status text is the locked sentence');
+    const link = $('fill-status').querySelector('a');
+    ok(link, 'has install link');
+    eq(link.textContent, 'install the extension');
+    eq(link.getAttribute('href'), '#load-extension');
+    ok($('load-extension'), 'install section exists');
+    ok($('load-extension').closest('#overflow'), 'install section is inside More');
+    ok(!$('overflow').open, 'More still closed before the click');
+    ok(!isShown($('load-extension')), 'steps hidden while More is closed');
+    eq($('fill-usage-btn').textContent.trim(), 'Fill from Claude Usage', 'Fill label unchanged');
+    eq(text(D.querySelector('footer.foot')).replace(/\s+/g, ' ').trim(),
+      'Runs only in this tab. Only reads Usage after you click Fill. Nothing burns until you Mark done.',
+      'footer unchanged');
+    eq(text($('done-line')).trim(), 'Marked done. Fill again after your next session.', 'done banner line unchanged');
+    ok($('done-banner').hidden, 'done banner stays hidden');
+
+    instantScroll(true);
+    const spy = spyScrollFocus();
+    const pathBefore = W.location.pathname;
+    try {
+      link.click();
+      ok($('overflow').open, 'clicking the link opens More');
+      ok(isShown($('load-extension')), 'install steps are visible');
+      eq(W.location.pathname, pathBefore, 'still on the same page');
+      ok(W.location.href.indexOf('README') === -1, 'did not navigate to README');
+      eq(W.location.hash, '#load-extension', 'hash is the in-page target');
+      const scrolled = spy.log.filter(e => e.kind === 'scroll' && e.node === $('load-extension'));
+      ok(scrolled.length > 0, 'scrolls the install section into view');
+      eq(scrolled[0].behavior, 'auto', 'reduced-motion test path uses auto scroll');
+      ok(inViewport($('load-extension')) || scrolled.length > 0, 'lands on the install steps');
+    } finally {
+      spy.restore();
+      instantScroll(false);
+      // later tests use fresh() (no reload) and assert an empty hash
+      if (W.history && W.history.replaceState) W.history.replaceState(null, '', pathBefore);
+      else W.location.hash = '';
+    }
+
+    const steps = Array.from($('load-extension').querySelectorAll('ol li')).map(li => text(li).replace(/\s+/g, ' ').trim());
+    eq(steps.length, 3, 'three Load unpacked steps');
+    ok(steps[0].indexOf('chrome://extensions') !== -1 && steps[0].indexOf('Developer mode') !== -1 &&
+      steps[0].indexOf('Load unpacked') !== -1 && steps[0].indexOf('extension/') !== -1, 'step 1 matches README');
+    ok(steps[1].indexOf('https://claude.ai/settings/usage') !== -1 &&
+      steps[1].indexOf('leave the tab open') !== -1, 'step 2 matches README');
+    ok(steps[2].indexOf('sh scripts/serve.sh') !== -1 && steps[2].indexOf('http://127.0.0.1:8000/') !== -1 &&
+      steps[2].indexOf('Fill from Claude Usage') !== -1 && steps[2].indexOf('Get project') !== -1 &&
+      steps[2].indexOf('Mark done') !== -1, 'step 3 matches README');
+    ok(text($('load-extension')).indexOf('30 seconds') === -1, 'install section has no 30 seconds');
+    ok(text($('load-extension')).indexOf('No problem') === -1, 'install section has no No problem');
+  });
+
+  test('No-extension install link does not break mid-word at 1280 or 390', async () => {
+    await fresh();
+    await reloadApp();
+    removeUsageBridge();
+    $('fill-usage-btn').click();
+    await wait(1700);
+    const link = $('fill-status').querySelector('a');
+    ok(link, 'has install link');
+    for (const width of [1280, 390]) {
+      frame.style.width = width + 'px';
+      await wait(80);
+      const cs = W.getComputedStyle(link);
+      eq(cs.whiteSpace, 'nowrap', width + ' white-space: nowrap');
+      ok(cs.hyphens === 'none' || cs.hyphens === 'manual', width + ' no auto hyphenation (' + cs.hyphens + ')');
+      ok(cs.wordBreak === 'normal' || cs.wordBreak === 'keep-all', width + ' no break-all (' + cs.wordBreak + ')');
+      const broken = midWordBreaks(link);
+      eq(broken.join(' | '), '', width + ' mid-word break');
+      const rects = link.getClientRects();
+      ok(rects.length >= 1, width + ' link is visible');
+      for (let i = 0; i < rects.length; i++) {
+        ok(rects[i].width > 0 && rects[i].height > 0, width + ' link box ' + i + ' has size');
+      }
+    }
+    frame.style.width = '';
+  });
+
+  test('index.html and js do not contain "No problem" or "30 seconds"', async () => {
+    const files = ['../index.html', '../js/app.js', '../js/core.js', '../js/projects.js'];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const res = await fetch(f);
+      ok(res.ok, 'fetched ' + f);
+      const body = await res.text();
+      ok(body.indexOf('No problem') === -1, f + ' contains "No problem"');
+      ok(body.indexOf('30 seconds') === -1, f + ' contains "30 seconds"');
+      if (f === '../js/app.js') {
+        ok(body.indexOf("const STORE_KEY = 'qp-v0'") !== -1, 'sessionStorage key stays qp-v0');
+      }
+    }
   });
 
   test('Fill again after Mark done (#21): clears done state and old numbers, keeps plan, one status at a time', async () => {
@@ -3766,7 +3889,7 @@
     // copy edit fails the check above, not this one.
     [
       [/^Reading Usage/, '#fill-status'],
-      [/^No extension\? No problem\./, '#fill-status'],
+      [/^No extension here\./, '#fill-status'],
       [/^Couldn.t read Usage\./, '#fill-status'],
       [/^Filled from Usage\.$/, '#fill-status'],
       [/^Updated from Usage\.$/, '#fill-status'],

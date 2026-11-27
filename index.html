@@ -61,6 +61,15 @@
 
         <p class="overflow-actions"><button type="button" class="secondary" id="example-btn">Try sample</button></p>
 
+        <section id="load-extension" class="load-extension">
+          <h3 tabindex="-1">Load unpacked</h3>
+          <ol>
+            <li><code>chrome://extensions</code> → Developer mode → Load unpacked → select <code>extension/</code></li>
+            <li>Open Claude → Settings → Usage (<code>https://claude.ai/settings/usage</code>) and leave the tab open</li>
+            <li>Run <code>sh scripts/serve.sh</code> → open http://127.0.0.1:8000/ → <strong>Fill from Claude Usage</strong> → choose a plan → <strong>Get project</strong> → pick the one card → <strong>Mark done</strong></li>
+          </ol>
+        </section>
+
         <details class="how-copy">
           <summary>How to copy</summary>
           <ol class="copy-path" aria-label="Open Usage">

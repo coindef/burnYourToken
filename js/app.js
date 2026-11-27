@@ -246,6 +246,15 @@
     if (focusNode) focusNode.focus({ preventScroll: true });
   }
 
+  // Opens More if it is closed, then scrolls to the Load unpacked steps.
+  function revealLoadExtension() {
+    const overflow = $('overflow');
+    if (overflow) overflow.open = true;
+    const target = $('load-extension');
+    if (!target) return;
+    scrollToTarget(target, 'start', target.querySelector('h3'));
+  }
+
   // After Get project: bring the hero into view and put focus on its title (not the whole card).
   function focusHeroAfterGet() {
     const title = document.querySelector('#recs-list .card.hero h3');
@@ -917,8 +926,8 @@
   const FILL_WORKING = 'Reading Usage…';
   const FILL_OK = 'Filled from Usage.';
   const FILL_AGAIN = 'Updated from Usage.'; // 2nd+ successful read, so Fill again visibly responds
-  const FILL_NO_EXT = 'No extension? No problem. Type your numbers below, or install it in 30 seconds.';
-  const README_INSTALL = 'README.md#load-unpacked-30-seconds';
+  const FILL_NO_EXT = 'No extension here. Type Session, Resets in, and Weekly below, or install the extension.';
+  const INSTALL_HREF = '#load-extension';
   const FILL_PARSE = 'Couldn’t read Usage. Keep Claude → Settings → Usage open, then try again — or copy by hand.';
   const FILL_TIMEOUT_MS = 1500;
   let fillGen = 0;
@@ -940,12 +949,10 @@
     node.className = 'fill-status ' + kind;
     node.textContent = text;
     if (text === FILL_NO_EXT) {
-      // Point "README" at the install steps. Relative link: the page stays offline.
-      // Fields are already open and focused, so "Type your numbers below" is plain text;
-      // only the install link points at the README steps.
-      node.textContent = 'No extension? No problem. Type your numbers below';
-      node.appendChild(document.createTextNode(', or '));
-      node.appendChild(el('a', { href: README_INSTALL, text: 'install it in 30 seconds' }));
+      // Fields are already open and focused. Only "install the extension" is a link,
+      // and it points at the in-page steps inside More, so a file:// page stays offline.
+      node.textContent = 'No extension here. Type Session, Resets in, and Weekly below, or ';
+      node.appendChild(el('a', { href: INSTALL_HREF, text: 'install the extension' }));
       node.appendChild(document.createTextNode('.'));
     }
     if (kind === 'ok') {
@@ -1184,6 +1191,21 @@
     pickVoice = voiceOf($('pick-live'));
     $('not-this-btn').addEventListener('click', notThisOne);
     window.addEventListener('resize', releaseLock);
+
+    document.addEventListener('click', function (e) {
+      const a = e.target.closest && e.target.closest('a[href="#load-extension"]');
+      if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      revealLoadExtension();
+      if (location.hash !== '#load-extension') {
+        if (history.pushState) history.pushState(null, '', '#load-extension');
+        else location.hash = 'load-extension';
+      }
+    });
+    window.addEventListener('hashchange', function () {
+      if (location.hash === '#load-extension') revealLoadExtension();
+    });
+    if (location.hash === '#load-extension') revealLoadExtension();
 
     restore();
     // index.html marks both Fill buttons primary; pick one so a reload in the done state keeps one primary.
